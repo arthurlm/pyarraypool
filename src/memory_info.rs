@@ -13,10 +13,23 @@ pub enum ArrayPoolError {
 
     #[error("object cannot be found")]
     ObjectNotFound,
+
+    #[error("invalid python object ID")]
+    InvalidPythonId,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub struct PythonId(pub u64);
+
+impl PythonId {
+    pub fn valid(&self) -> Result<(), ArrayPoolError> {
+        if self.0 == 0 {
+            Err(ArrayPoolError::InvalidPythonId)
+        } else {
+            Ok(())
+        }
+    }
+}
 
 /// Store information about memory hole.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -79,6 +92,8 @@ impl MemoryPool {
         python_id: PythonId,
         request_size: usize,
     ) -> Result<usize, ArrayPoolError> {
+        python_id.valid()?;
+
         // Check object does not already exists
         if self.slots.iter().any(|x| x.python_id == python_id) {
             return Err(ArrayPoolError::ObjectAlreadyExists);
@@ -118,6 +133,8 @@ impl MemoryPool {
 
     /// Remove object from pool.
     pub fn remove_object(&mut self, python_id: PythonId) -> Result<(), ArrayPoolError> {
+        python_id.valid()?;
+
         let object_index = self
             .slots
             .iter()
@@ -292,6 +309,15 @@ mod tests {
         }
 
         #[test]
+        fn test_add_invalid_python_id() {
+            let mut memory = memory_pool!();
+            assert_eq!(
+                memory.add_object(PythonId(0), 10),
+                Err(ArrayPoolError::InvalidPythonId)
+            );
+        }
+
+        #[test]
         fn test_add_duplicated_object() {
             let mut memory = memory_pool!();
 
@@ -396,6 +422,15 @@ mod tests {
             assert_eq!(
                 memory.add_object(PythonId(43), 0),
                 Err(ArrayPoolError::NoSpaceLeft)
+            );
+        }
+
+        #[test]
+        fn test_remove_invalid_python_id() {
+            let mut memory = memory_pool!();
+            assert_eq!(
+                memory.remove_object(PythonId(0)),
+                Err(ArrayPoolError::InvalidPythonId)
             );
         }
 
