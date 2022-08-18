@@ -162,6 +162,15 @@ impl MemoryPool {
 
         Ok(())
     }
+
+    /// Get offset of given python object.
+    pub fn offset_of(&self, python_id: PythonId) -> Option<usize> {
+        python_id.valid().ok()?;
+
+        let position = self.slots.iter().position(|x| x.python_id == python_id)?;
+        let addr = self.slots[..position].iter().map(|x| x.size).sum();
+        Some(addr)
+    }
 }
 
 /// Builder for memory pool.
@@ -484,6 +493,8 @@ mod tests {
 
             // Remove middle one
             assert_eq!(memory.remove_object(PythonId(41)), Ok(()));
+            assert_eq!(memory.offset_of(PythonId(40)), Some(0));
+            assert_eq!(memory.offset_of(PythonId(42)), Some(20));
             assert_eq!(
                 memory.slots,
                 vec![
@@ -496,6 +507,7 @@ mod tests {
 
             // Remove previous
             assert_eq!(memory.remove_object(PythonId(40)), Ok(()));
+            assert_eq!(memory.offset_of(PythonId(42)), Some(20));
             assert_eq!(
                 memory.slots,
                 vec![
@@ -563,6 +575,32 @@ mod tests {
                     MemorySlot::with_size(MEMORY_SIZE - 10 - 10 - 10),
                 ]
             );
+        }
+
+        #[test]
+        fn test_offset_of_invalid_python_id() {
+            let memory = memory_pool!();
+            assert_eq!(memory.offset_of(PythonId(0)), None);
+        }
+
+        #[test]
+        fn test_offset_of_missing_obj() {
+            let memory = memory_pool!();
+            assert_eq!(memory.offset_of(PythonId(42)), None);
+        }
+
+        #[test]
+        fn test_offset_of() {
+            let mut memory = memory_pool!();
+            let python_id = PythonId(42);
+
+            assert_eq!(memory.offset_of(python_id), None);
+
+            assert!(memory.add_object(python_id, 10).is_ok());
+            assert_eq!(memory.offset_of(python_id), Some(0));
+
+            assert!(memory.remove_object(python_id).is_ok());
+            assert_eq!(memory.offset_of(python_id), None);
         }
     }
 }
