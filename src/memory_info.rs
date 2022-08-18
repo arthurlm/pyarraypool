@@ -22,7 +22,7 @@ pub enum ArrayPoolError {
 pub struct PythonId(pub u64);
 
 impl PythonId {
-    pub fn valid(&self) -> Result<(), ArrayPoolError> {
+    fn valid(&self) -> Result<(), ArrayPoolError> {
         if self.0 == 0 {
             Err(ArrayPoolError::InvalidPythonId)
         } else {
@@ -34,17 +34,17 @@ impl PythonId {
 /// Store information about memory hole.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(C)]
-pub struct MemorySlot {
+struct MemorySlot {
     /// Python object ID.
-    pub python_id: PythonId,
+    python_id: PythonId,
 
     /// Slot size in bytes.
-    pub size: usize,
+    size: usize,
 }
 
 impl MemorySlot {
     /// Create empty slot.
-    pub const fn empty() -> Self {
+    const fn empty() -> Self {
         Self {
             python_id: PythonId(0),
             size: 0,
@@ -52,7 +52,7 @@ impl MemorySlot {
     }
 
     /// Create new slot with size and without data.
-    pub const fn with_size(size: usize) -> Self {
+    const fn with_size(size: usize) -> Self {
         Self {
             python_id: PythonId(0),
             size,
@@ -60,17 +60,17 @@ impl MemorySlot {
     }
 
     /// Create new slot with python ID and object size.
-    pub const fn with_object_id(python_id: PythonId, size: usize) -> Self {
+    const fn with_object_id(python_id: PythonId, size: usize) -> Self {
         Self { python_id, size }
     }
 
     /// Check if slot is free.
-    pub const fn is_free(&self) -> bool {
+    const fn is_free(&self) -> bool {
         self.python_id.0 == 0
     }
 
     /// Split block to create new free space.
-    pub const fn split_block(&self, bytes_count: usize) -> (Self, Self) {
+    const fn split_block(&self, bytes_count: usize) -> (Self, Self) {
         assert!(bytes_count < self.size);
         (
             Self::with_object_id(self.python_id, bytes_count),
