@@ -19,6 +19,7 @@ pub enum ArrayPoolError {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
+#[repr(C)]
 pub struct PythonId(pub u64);
 
 impl PythonId {
@@ -38,7 +39,7 @@ impl PythonId {
 /// Store information about memory hole.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(C)]
-struct MemorySlot {
+pub struct MemorySlot {
     /// Python object ID.
     python_id: PythonId,
 
@@ -51,7 +52,7 @@ struct MemorySlot {
 
 impl MemorySlot {
     /// Create empty slot.
-    const fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
             python_id: PythonId::empty(),
             size: 0,
@@ -103,12 +104,32 @@ impl MemorySlot {
 }
 
 /// Vector of memory slot with associated function to manage them.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct MemoryPool {
-    slots: Vec<MemorySlot>,
+#[derive(Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct MemoryPool<'a> {
+    slots: &'a mut [MemorySlot],
 }
 
-impl MemoryPool {
+impl<'a> MemoryPool<'a> {
+    /// Create struct from already init vec.
+    pub fn new(slots: &'a mut [MemorySlot]) -> Self {
+        Self { slots }
+    }
+
+    /// Create new structure from uninitialized slice.
+    pub fn from_uninit_slice(slots: &'a mut [MemorySlot], data_size: usize) -> Self {
+        assert!(slots.len() > 0);
+        assert!(data_size > 0);
+
+        // Init array
+        for i in 1..slots.len() {
+            slots[i] = MemorySlot::empty();
+        }
+        slots[0] = MemorySlot::with_size(data_size);
+
+        Self::new(slots)
+    }
+
     /// Add new object to pool.
     pub fn add_object(
         &mut self,
@@ -223,51 +244,6 @@ impl MemoryPool {
     }
 }
 
-/// Builder for memory pool.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct MemoryPoolBuilder {
-    slot_count: usize,
-    memory_size: usize,
-}
-
-impl MemoryPoolBuilder {
-    /// Set slot count.
-    pub const fn slot_count(mut self, value: usize) -> Self {
-        assert!(value > 0);
-        self.slot_count = value;
-        self
-    }
-
-    /// Set memory size.
-    pub const fn memory_size(mut self, value: usize) -> Self {
-        assert!(value > 0);
-        self.memory_size = value;
-        self
-    }
-
-    /// Build new pool from current config.
-    pub fn build(&self) -> MemoryPool {
-        debug_assert!(self.memory_size > 0);
-        debug_assert!(self.slot_count > 0);
-
-        let mut x = MemoryPool {
-            slots: vec![MemorySlot::empty(); self.slot_count],
-        };
-        x.slots[0].size = self.memory_size;
-
-        x
-    }
-}
-
-impl Default for MemoryPoolBuilder {
-    fn default() -> Self {
-        Self {
-            slot_count: 1000,
-            memory_size: 500 * 1024 * 1024,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -355,19 +331,12 @@ mod tests {
         use super::*;
 
         const MEMORY_SIZE: usize = 10 * 1024;
-
-        macro_rules! memory_pool {
-            () => {
-                MemoryPoolBuilder::default()
-                    .slot_count(4)
-                    .memory_size(MEMORY_SIZE)
-                    .build()
-            };
-        }
+        const SLOT_COUNT: usize = 4;
 
         #[test]
         fn test_init() {
-            let memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
             assert_eq!(
                 memory.slots,
                 vec![
@@ -381,7 +350,8 @@ mod tests {
 
         #[test]
         fn test_add_invalid_python_id() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
             assert_eq!(
                 memory.add_object(PythonId::empty(), 10),
                 Err(ArrayPoolError::InvalidPythonId)
@@ -390,7 +360,8 @@ mod tests {
 
         #[test]
         fn test_add_duplicated_object() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
 
             assert_eq!(memory.add_object(PythonId(40), 10), Ok(0));
             assert_eq!(
@@ -401,7 +372,8 @@ mod tests {
 
         #[test]
         fn test_add_huge_bloc() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
 
             assert_eq!(
                 memory.add_object(PythonId(40), MEMORY_SIZE + 1),
@@ -411,7 +383,8 @@ mod tests {
 
         #[test]
         fn test_add_bloc() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
 
             assert_eq!(memory.add_object(PythonId(40), 150), Ok(0));
             assert_eq!(memory.add_object(PythonId(41), 50), Ok(150));
@@ -430,7 +403,8 @@ mod tests {
 
         #[test]
         fn test_add_single_huge_bloc() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
 
             // Add bloc
             assert_eq!(memory.add_object(PythonId(42), MEMORY_SIZE), Ok(0));
@@ -455,7 +429,8 @@ mod tests {
 
         #[test]
         fn test_add_empty_bloc() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
 
             // Add blocs
             assert_eq!(memory.add_object(PythonId(40), 0), Ok(0));
@@ -498,7 +473,8 @@ mod tests {
 
         #[test]
         fn test_detach_invalid_python_id() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
             assert_eq!(
                 memory.detach_object(PythonId::empty()),
                 Err(ArrayPoolError::InvalidPythonId)
@@ -507,7 +483,8 @@ mod tests {
 
         #[test]
         fn test_detach_not_found() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
 
             assert_eq!(
                 memory.detach_object(PythonId(42)),
@@ -517,7 +494,8 @@ mod tests {
 
         #[test]
         fn test_add_and_detach() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
 
             // Add
             assert!(memory.add_object(PythonId(40), 10).is_ok());
@@ -546,7 +524,8 @@ mod tests {
 
         #[test]
         fn test_detach_elements() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
 
             // Add
             assert!(memory.add_object(PythonId(40), 10).is_ok());
@@ -595,7 +574,8 @@ mod tests {
 
         #[test]
         fn test_fill_holes() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
 
             // Add
             assert!(memory.add_object(PythonId(40), 10).is_ok());
@@ -641,19 +621,22 @@ mod tests {
 
         #[test]
         fn test_offset_of_invalid_python_id() {
-            let memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
             assert_eq!(memory.offset_of(PythonId::empty()), None);
         }
 
         #[test]
         fn test_offset_of_missing_obj() {
-            let memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
             assert_eq!(memory.offset_of(PythonId(42)), None);
         }
 
         #[test]
         fn test_offset_of() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
             let python_id = PythonId(42);
 
             assert_eq!(memory.offset_of(python_id), None);
@@ -667,7 +650,8 @@ mod tests {
 
         #[test]
         fn test_attach_object_invalid_python_id() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
             assert_eq!(
                 memory.attach_object(PythonId::empty()),
                 Err(ArrayPoolError::InvalidPythonId)
@@ -676,7 +660,8 @@ mod tests {
 
         #[test]
         fn test_attach_object_missing() {
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
             assert_eq!(
                 memory.attach_object(PythonId(40)),
                 Err(ArrayPoolError::ObjectNotFound)
@@ -687,7 +672,8 @@ mod tests {
         fn test_attach_object() {
             let python_id1 = PythonId(40);
             let python_id2 = PythonId(41);
-            let mut memory = memory_pool!();
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
 
             assert!(memory.add_object(python_id1, 20).is_ok());
             assert!(memory.add_object(python_id2, 10).is_ok());

@@ -1,15 +1,13 @@
 #![allow(dead_code)] // FIXME
 
-use crate::memory_info::PythonId;
+use crate::memory_info::{MemorySlot, PythonId};
 
 mod memory_info;
 mod metadata;
 
 fn main() {
-    let mut infos = memory_info::MemoryPoolBuilder::default()
-        .slot_count(4)
-        .memory_size(200 * 1024 * 1024)
-        .build();
+    let mut data = vec![MemorySlot::empty(); 50];
+    let mut infos = memory_info::MemoryPool::from_uninit_slice(&mut data, 200 * 1024 * 1024);
 
     infos.add_object(PythonId(42), 200).unwrap();
 
