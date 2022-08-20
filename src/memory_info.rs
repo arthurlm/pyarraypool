@@ -1,23 +1,32 @@
+/*! Helper to manage memory block. */
+
 use thiserror::Error;
 
+/// Possible error that can occurs with memory pool management.
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum ArrayPoolError {
+    /// No space left in pool.
     #[error("no space left")]
     NoSpaceLeft,
 
+    /// No free bloc left in pool.
     #[error("no free bloc left")]
     NoFreeBlocLeft,
 
+    /// Object already exists.
     #[error("object already exists")]
     ObjectAlreadyExists,
 
+    /// Object is not found.
     #[error("object cannot be found")]
     ObjectNotFound,
 
+    /// Invalid python object ID.
     #[error("invalid python object ID")]
     InvalidPythonId,
 }
 
+/// Wrapper arount u64 to add and restrict python ID values.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 #[repr(C)]
 pub struct PythonId(pub u64);
@@ -175,6 +184,7 @@ impl<'a> MemoryPool<'a> {
         Ok(self.offset_by_index(target_idx))
     }
 
+    /// Increase ref count usage by 1 for a given python object.
     pub fn attach_object(&mut self, python_id: PythonId) -> Result<usize, ArrayPoolError> {
         python_id.valid()?;
 
