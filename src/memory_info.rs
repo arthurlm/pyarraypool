@@ -3,7 +3,7 @@
 use thiserror::Error;
 
 /// Possible error that can occurs with memory pool management.
-#[derive(Debug, PartialEq, Eq, Error)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Error)]
 pub enum ArrayPoolError {
     /// No space left in pool.
     #[error("no space left")]

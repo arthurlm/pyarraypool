@@ -3,9 +3,12 @@ name = "pyarraypool"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+fslock = "0.2.1"
+shared_memory = "0.12.4"
 smallstr = "0.3.0"
 smallvec = "1.9.0"
 thiserror = "1.0.32"
+
+[dev-dependencies]
+anyhow = "1.0.62"
