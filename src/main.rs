@@ -6,7 +6,6 @@
 use crate::{memory_info::PythonId, shm::ShmObjectPoolBuilder};
 
 pub mod memory_info;
-mod metadata;
 mod mutex;
 pub mod shm;
 

@@ -6,8 +6,6 @@ edition = "2021"
 [dependencies]
 fslock = "0.2.1"
 shared_memory = "0.12.4"
-smallstr = "0.3.0"
-smallvec = "1.9.0"
 thiserror = "1.0.32"
 
 [dev-dependencies]
