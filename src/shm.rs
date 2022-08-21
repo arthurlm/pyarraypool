@@ -239,6 +239,12 @@ impl ShmObjectPoolBuilder {
     }
 }
 
+impl Default for ShmObjectPoolBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -127,12 +127,12 @@ impl<'a> MemoryPool<'a> {
 
     /// Create new structure from uninitialized slice.
     pub fn from_uninit_slice(slots: &'a mut [MemorySlot], data_size: usize) -> Self {
-        assert!(slots.len() > 0);
+        assert!(!slots.is_empty());
         assert!(data_size > 0);
 
         // Init array
-        for i in 1..slots.len() {
-            slots[i] = MemorySlot::empty();
+        for slot in slots.iter_mut().skip(1) {
+            *slot = MemorySlot::empty();
         }
         slots[0] = MemorySlot::with_size(data_size);
 
