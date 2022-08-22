@@ -106,7 +106,7 @@ impl<'a> ShmObjectPool<'a> {
         let shmem = ShmemConf::new().flink(segment_path).open()?;
         let fs_mutex = FsMutex::open(&segment_path.with_extension("lock"))?;
 
-        let mut raw_ptr = shmem.as_ptr();
+        let raw_ptr = shmem.as_ptr();
 
         // Read and check header
         let header = unsafe { &*(raw_ptr as *const ShmHeader) };
@@ -114,8 +114,10 @@ impl<'a> ShmObjectPool<'a> {
 
         // Read slots array
         let slots = unsafe {
-            raw_ptr = raw_ptr.add(SHM_HEADER_SIZE);
-            std::slice::from_raw_parts_mut(raw_ptr as *mut MemorySlot, header.slot_count)
+            std::slice::from_raw_parts_mut(
+                raw_ptr.add(SHM_HEADER_SIZE) as *mut MemorySlot,
+                header.slot_count,
+            )
         };
 
         // Create struct
@@ -233,7 +235,7 @@ impl ShmObjectPoolBuilder {
             .create()?;
         let fs_mutex = FsMutex::open(&self.segment_path.with_extension("lock"))?;
 
-        let mut raw_ptr = shmem.as_ptr();
+        let raw_ptr = shmem.as_ptr();
 
         // Init header
         let header = unsafe { &mut *(raw_ptr as *mut ShmHeader) };
@@ -241,8 +243,10 @@ impl ShmObjectPoolBuilder {
 
         // Create object pool
         let slots = unsafe {
-            raw_ptr = raw_ptr.add(SHM_HEADER_SIZE);
-            std::slice::from_raw_parts_mut(raw_ptr as *mut MemorySlot, header.slot_count)
+            std::slice::from_raw_parts_mut(
+                raw_ptr.add(SHM_HEADER_SIZE) as *mut MemorySlot,
+                header.slot_count,
+            )
         };
 
         Ok(ShmObjectPool {
