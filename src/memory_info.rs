@@ -245,6 +245,16 @@ impl<'a> MemoryPool<'a> {
         self.slots[..object_index].iter().map(|x| x.size).sum()
     }
 
+    /// Get size of given python object.
+    pub fn size_of(&self, python_id: PythonId) -> Option<usize> {
+        python_id.valid().ok()?;
+
+        self.slots
+            .iter()
+            .find(|x| x.python_id == python_id)
+            .map(|x| x.size)
+    }
+
     /// Get offset of given python object.
     pub fn offset_of(&self, python_id: PythonId) -> Option<usize> {
         python_id.valid().ok()?;
@@ -545,7 +555,9 @@ mod tests {
             // Detach middle one
             assert_eq!(memory.detach_object(PythonId(41)), Ok(()));
             assert_eq!(memory.offset_of(PythonId(40)), Some(0));
+            assert_eq!(memory.size_of(PythonId(40)), Some(10));
             assert_eq!(memory.offset_of(PythonId(42)), Some(20));
+            assert_eq!(memory.size_of(PythonId(42)), Some(10));
             assert_eq!(
                 memory.slots,
                 vec![
@@ -559,6 +571,7 @@ mod tests {
             // Detach previous
             assert_eq!(memory.detach_object(PythonId(40)), Ok(()));
             assert_eq!(memory.offset_of(PythonId(42)), Some(20));
+            assert_eq!(memory.size_of(PythonId(42)), Some(10));
             assert_eq!(
                 memory.slots,
                 vec![
@@ -656,6 +669,35 @@ mod tests {
 
             assert!(memory.detach_object(python_id).is_ok());
             assert_eq!(memory.offset_of(python_id), None);
+        }
+
+        #[test]
+        fn test_size_of_invalid_python_id() {
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
+            assert_eq!(memory.size_of(PythonId::empty()), None);
+        }
+
+        #[test]
+        fn test_size_of_missing_obj() {
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
+            assert_eq!(memory.size_of(PythonId(42)), None);
+        }
+
+        #[test]
+        fn test_size_of() {
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
+            let python_id = PythonId(42);
+
+            assert_eq!(memory.size_of(python_id), None);
+
+            assert!(memory.add_object(python_id, 15).is_ok());
+            assert_eq!(memory.size_of(python_id), Some(15));
+
+            assert!(memory.detach_object(python_id).is_ok());
+            assert_eq!(memory.size_of(python_id), None);
         }
 
         #[test]
