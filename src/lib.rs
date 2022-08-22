@@ -14,9 +14,9 @@ use std::{
 };
 
 use memory_info::PythonId;
+use pyo3::exceptions::PyException;
+use pyo3::prelude::*;
 use pyo3::types::PyTuple;
-use pyo3::{exceptions::PyException, types::PyByteArray};
-use pyo3::{ffi::PyMemoryView_FromMemory, prelude::*};
 use shm::{ShmError, ShmObjectPool};
 
 use crate::shm::ShmObjectPoolBuilder;
@@ -72,7 +72,7 @@ impl PyShmObjectPool {
             .map_err(|e| e.into())
     }
 
-    fn attach_object(&self, python_id: u64) -> PyResult<usize> {
+    fn attach_object(&self, python_id: u64) -> PyResult<(usize, usize)> {
         self.pool
             .lock()
             .expect("Pool poisoned")

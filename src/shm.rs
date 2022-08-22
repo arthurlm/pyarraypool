@@ -140,10 +140,10 @@ impl<'a> ShmObjectPool<'a> {
     }
 
     /// Mark object as used by current process.
-    pub fn attach_object(&self, python_id: PythonId) -> Result<usize, ShmError> {
+    pub fn attach_object(&self, python_id: PythonId) -> Result<(usize, usize), ShmError> {
         let _guard = self.fs_mutex.lock()?;
-        let offset = self.memory_pool.borrow_mut().attach_object(python_id)?;
-        Ok(offset + self.offset_data)
+        let (offset, size) = self.memory_pool.borrow_mut().attach_object(python_id)?;
+        Ok((offset + self.offset_data, size))
     }
 
     /// Un-mark object as used by current process.
@@ -293,7 +293,7 @@ mod tests {
             assert_eq!(pool2.offset_of(python_id), Some(offset));
 
             // Attach object from pool2, and detach from pool1
-            assert_eq!(pool2.attach_object(python_id), Ok(offset));
+            assert_eq!(pool2.attach_object(python_id), Ok((offset, 100)));
             assert_eq!(pool1.detach_object(python_id), Ok(()));
 
             assert_eq!(pool1.offset_of(python_id), Some(offset));

@@ -185,7 +185,9 @@ impl<'a> MemoryPool<'a> {
     }
 
     /// Increase ref count usage by 1 for a given python object.
-    pub fn attach_object(&mut self, python_id: PythonId) -> Result<usize, ArrayPoolError> {
+    ///
+    /// Return object offset and size as tuple.
+    pub fn attach_object(&mut self, python_id: PythonId) -> Result<(usize, usize), ArrayPoolError> {
         python_id.valid()?;
 
         // Get object index
@@ -198,7 +200,10 @@ impl<'a> MemoryPool<'a> {
         // Increase refcount
         self.slots[object_index].refcount += 1;
 
-        Ok(self.offset_by_index(object_index))
+        Ok((
+            self.offset_by_index(object_index),
+            self.slots[object_index].size,
+        ))
     }
 
     /// Decrease ref count usage by 1 for a given python object.
@@ -731,13 +736,13 @@ mod tests {
             assert!(memory.add_object(python_id2, 10).is_ok());
 
             // Attach multiple time object
-            assert_eq!(memory.attach_object(python_id1), Ok(0));
-            assert_eq!(memory.attach_object(python_id2), Ok(20));
+            assert_eq!(memory.attach_object(python_id1), Ok((0, 20)));
+            assert_eq!(memory.attach_object(python_id2), Ok((20, 10)));
 
-            assert_eq!(memory.attach_object(python_id1), Ok(0));
-            assert_eq!(memory.attach_object(python_id2), Ok(20));
+            assert_eq!(memory.attach_object(python_id1), Ok((0, 20)));
+            assert_eq!(memory.attach_object(python_id2), Ok((20, 10)));
 
-            assert_eq!(memory.attach_object(python_id1), Ok(0));
+            assert_eq!(memory.attach_object(python_id1), Ok((0, 20)));
 
             // Check memory
             assert_eq!(
