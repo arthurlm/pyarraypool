@@ -4,11 +4,16 @@ build-backend = "maturin"
 
 [project]
 name = "pyarraypool"
+description = "Manage pool of array using shared memory"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
+]
+keywords = ["sharedmemory", "pool", "ndarray"]
+maintainers = [
+  {name = "Arthur LE MOIGNE", email = "arthur.lemoigne@gmail.com"}
 ]
 
 [tool.maturin]
