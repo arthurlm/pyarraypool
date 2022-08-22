@@ -8,15 +8,19 @@ mod mutex;
 pub mod shm;
 
 use std::{
+    os::raw::c_schar,
     path::PathBuf,
     str::FromStr,
     sync::{Arc, Mutex},
 };
 
 use memory_info::PythonId;
-use pyo3::exceptions::PyException;
-use pyo3::prelude::*;
-use pyo3::types::PyTuple;
+use pyo3::{
+    exceptions::PyException,
+    ffi::{PyBUF_WRITE, PyMemoryView_FromMemory},
+};
+use pyo3::{ffi::PyMemoryView_Check, prelude::*};
+use pyo3::{ffi::Py_ssize_t, types::PyTuple};
 use shm::{ShmError, ShmObjectPool};
 
 use crate::shm::ShmObjectPoolBuilder;
@@ -64,20 +68,16 @@ impl PyShmObjectPool {
         })
     }
 
-    fn add_object(&self, python_id: u64, request_size: usize) -> PyResult<usize> {
-        self.pool
-            .lock()
-            .expect("Pool poisoned")
-            .add_object(PythonId(python_id), request_size)
-            .map_err(|e| e.into())
+    fn add_object(&self, python_id: u64, request_size: usize) -> PyResult<PyObject> {
+        let pool = self.pool.lock().expect("Pool poisoned");
+        let data = pool.add_object(PythonId(python_id), request_size)?;
+        Ok(self.pymemoryview_from_slice(data))
     }
 
-    fn attach_object(&self, python_id: u64) -> PyResult<(usize, usize)> {
-        self.pool
-            .lock()
-            .expect("Pool poisoned")
-            .attach_object(PythonId(python_id))
-            .map_err(|e| e.into())
+    fn attach_object(&self, python_id: u64) -> PyResult<PyObject> {
+        let pool = self.pool.lock().expect("Pool poisoned");
+        let data = pool.attach_object(PythonId(python_id))?;
+        Ok(self.pymemoryview_from_slice(data))
     }
 
     fn detach_object(&self, python_id: u64) -> PyResult<()> {
@@ -88,11 +88,29 @@ impl PyShmObjectPool {
             .map_err(|e| e.into())
     }
 
-    fn offset_of(&self, python_id: u64) -> Option<usize> {
-        self.pool
-            .lock()
-            .expect("Pool poisoned")
-            .offset_of(PythonId(python_id))
+    fn memview_of(&self, python_id: u64) -> Option<PyObject> {
+        let pool = self.pool.lock().expect("Pool poisoned");
+        let data = pool.slice_of(PythonId(python_id))?;
+        Some(self.pymemoryview_from_slice(data))
+    }
+}
+
+impl PyShmObjectPool {
+    fn pymemoryview_from_slice<'py>(&self, data: &mut [u8]) -> PyObject {
+        Python::with_gil(|py| unsafe {
+            let memview_ptr = PyMemoryView_FromMemory(
+                data.as_mut_ptr() as *mut c_schar,
+                data.len() as Py_ssize_t,
+                PyBUF_WRITE,
+            );
+
+            assert!(!memview_ptr.is_null());
+            assert!(PyMemoryView_Check(memview_ptr) == 1);
+
+            py.from_owned_ptr::<PyAny>(memview_ptr)
+                .extract()
+                .expect("Fail to create PyObject")
+        })
     }
 }
 

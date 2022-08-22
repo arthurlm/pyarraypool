@@ -112,6 +112,30 @@ impl MemorySlot {
     }
 }
 
+/// Contains information about existing object in memory pool.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct ObjectInfo {
+    offset: usize,
+    size: usize,
+}
+
+impl ObjectInfo {
+    /// Create new object.
+    pub fn new(offset: usize, size: usize) -> Self {
+        Self { offset, size }
+    }
+
+    /// Get object offset.
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    /// Get object size.
+    pub fn size(&self) -> usize {
+        self.size
+    }
+}
+
 /// Vector of memory slot with associated function to manage them.
 #[derive(Debug, PartialEq, Eq)]
 #[repr(C)]
@@ -185,9 +209,7 @@ impl<'a> MemoryPool<'a> {
     }
 
     /// Increase ref count usage by 1 for a given python object.
-    ///
-    /// Return object offset and size as tuple.
-    pub fn attach_object(&mut self, python_id: PythonId) -> Result<(usize, usize), ArrayPoolError> {
+    pub fn attach_object(&mut self, python_id: PythonId) -> Result<ObjectInfo, ArrayPoolError> {
         python_id.valid()?;
 
         // Get object index
@@ -200,7 +222,7 @@ impl<'a> MemoryPool<'a> {
         // Increase refcount
         self.slots[object_index].refcount += 1;
 
-        Ok((
+        Ok(ObjectInfo::new(
             self.offset_by_index(object_index),
             self.slots[object_index].size,
         ))
@@ -250,22 +272,15 @@ impl<'a> MemoryPool<'a> {
         self.slots[..object_index].iter().map(|x| x.size).sum()
     }
 
-    /// Get size of given python object.
-    pub fn size_of(&self, python_id: PythonId) -> Option<usize> {
-        python_id.valid().ok()?;
-
-        self.slots
-            .iter()
-            .find(|x| x.python_id == python_id)
-            .map(|x| x.size)
-    }
-
-    /// Get offset of given python object.
-    pub fn offset_of(&self, python_id: PythonId) -> Option<usize> {
+    /// Get object info of given python object.
+    pub fn info_of(&self, python_id: PythonId) -> Option<ObjectInfo> {
         python_id.valid().ok()?;
 
         let position = self.slots.iter().position(|x| x.python_id == python_id)?;
-        Some(self.offset_by_index(position))
+        Some(ObjectInfo::new(
+            self.offset_by_index(position),
+            self.slots[position].size,
+        ))
     }
 }
 
@@ -559,10 +574,8 @@ mod tests {
 
             // Detach middle one
             assert_eq!(memory.detach_object(PythonId(41)), Ok(()));
-            assert_eq!(memory.offset_of(PythonId(40)), Some(0));
-            assert_eq!(memory.size_of(PythonId(40)), Some(10));
-            assert_eq!(memory.offset_of(PythonId(42)), Some(20));
-            assert_eq!(memory.size_of(PythonId(42)), Some(10));
+            assert_eq!(memory.info_of(PythonId(40)), Some(ObjectInfo::new(0, 10)));
+            assert_eq!(memory.info_of(PythonId(42)), Some(ObjectInfo::new(20, 10)));
             assert_eq!(
                 memory.slots,
                 vec![
@@ -575,8 +588,7 @@ mod tests {
 
             // Detach previous
             assert_eq!(memory.detach_object(PythonId(40)), Ok(()));
-            assert_eq!(memory.offset_of(PythonId(42)), Some(20));
-            assert_eq!(memory.size_of(PythonId(42)), Some(10));
+            assert_eq!(memory.info_of(PythonId(42)), Some(ObjectInfo::new(20, 10)));
             assert_eq!(
                 memory.slots,
                 vec![
@@ -648,61 +660,32 @@ mod tests {
         }
 
         #[test]
-        fn test_offset_of_invalid_python_id() {
+        fn test_info_of_invalid_python_id() {
             let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
             let memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
-            assert_eq!(memory.offset_of(PythonId::empty()), None);
+            assert_eq!(memory.info_of(PythonId::empty()), None);
         }
 
         #[test]
-        fn test_offset_of_missing_obj() {
+        fn test_info_of_missing_obj() {
             let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
             let memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
-            assert_eq!(memory.offset_of(PythonId(42)), None);
+            assert_eq!(memory.info_of(PythonId(42)), None);
         }
 
         #[test]
-        fn test_offset_of() {
+        fn test_info_of() {
             let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
             let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
             let python_id = PythonId(42);
 
-            assert_eq!(memory.offset_of(python_id), None);
+            assert_eq!(memory.info_of(python_id), None);
 
             assert!(memory.add_object(python_id, 10).is_ok());
-            assert_eq!(memory.offset_of(python_id), Some(0));
+            assert_eq!(memory.info_of(python_id), Some(ObjectInfo::new(0, 10)));
 
             assert!(memory.detach_object(python_id).is_ok());
-            assert_eq!(memory.offset_of(python_id), None);
-        }
-
-        #[test]
-        fn test_size_of_invalid_python_id() {
-            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
-            let memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
-            assert_eq!(memory.size_of(PythonId::empty()), None);
-        }
-
-        #[test]
-        fn test_size_of_missing_obj() {
-            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
-            let memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
-            assert_eq!(memory.size_of(PythonId(42)), None);
-        }
-
-        #[test]
-        fn test_size_of() {
-            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
-            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
-            let python_id = PythonId(42);
-
-            assert_eq!(memory.size_of(python_id), None);
-
-            assert!(memory.add_object(python_id, 15).is_ok());
-            assert_eq!(memory.size_of(python_id), Some(15));
-
-            assert!(memory.detach_object(python_id).is_ok());
-            assert_eq!(memory.size_of(python_id), None);
+            assert_eq!(memory.info_of(python_id), None);
         }
 
         #[test]
@@ -736,13 +719,19 @@ mod tests {
             assert!(memory.add_object(python_id2, 10).is_ok());
 
             // Attach multiple time object
-            assert_eq!(memory.attach_object(python_id1), Ok((0, 20)));
-            assert_eq!(memory.attach_object(python_id2), Ok((20, 10)));
+            assert_eq!(memory.attach_object(python_id1), Ok(ObjectInfo::new(0, 20)));
+            assert_eq!(
+                memory.attach_object(python_id2),
+                Ok(ObjectInfo::new(20, 10))
+            );
 
-            assert_eq!(memory.attach_object(python_id1), Ok((0, 20)));
-            assert_eq!(memory.attach_object(python_id2), Ok((20, 10)));
+            assert_eq!(memory.attach_object(python_id1), Ok(ObjectInfo::new(0, 20)));
+            assert_eq!(
+                memory.attach_object(python_id2),
+                Ok(ObjectInfo::new(20, 10))
+            );
 
-            assert_eq!(memory.attach_object(python_id1), Ok((0, 20)));
+            assert_eq!(memory.attach_object(python_id1), Ok(ObjectInfo::new(0, 20)));
 
             // Check memory
             assert_eq!(

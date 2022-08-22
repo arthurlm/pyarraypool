@@ -11,7 +11,7 @@ use shared_memory::{Shmem, ShmemConf, ShmemError};
 use thiserror::Error;
 
 use crate::{
-    memory_info::{ArrayPoolError, MemoryPool, MemorySlot, PythonId},
+    memory_info::{ArrayPoolError, MemoryPool, MemorySlot, ObjectInfo, PythonId},
     mutex::FsMutex,
 };
 
@@ -129,21 +129,26 @@ impl<'a> ShmObjectPool<'a> {
     }
 
     /// Add object to shm.
-    pub fn add_object(&self, python_id: PythonId, request_size: usize) -> Result<usize, ShmError> {
+    pub fn add_object(
+        &self,
+        python_id: PythonId,
+        request_size: usize,
+    ) -> Result<&'_ mut [u8], ShmError> {
         let _guard = self.fs_mutex.lock()?;
         let offset = self
             .memory_pool
             .borrow_mut()
             .add_object(python_id, request_size)?;
 
-        Ok(offset + self.offset_data)
+        let obj_mem_info = ObjectInfo::new(offset + self.offset_data, request_size);
+        Ok(self.slice_mut_from(obj_mem_info))
     }
 
     /// Mark object as used by current process.
-    pub fn attach_object(&self, python_id: PythonId) -> Result<(usize, usize), ShmError> {
+    pub fn attach_object(&self, python_id: PythonId) -> Result<&'_ mut [u8], ShmError> {
         let _guard = self.fs_mutex.lock()?;
-        let (offset, size) = self.memory_pool.borrow_mut().attach_object(python_id)?;
-        Ok((offset + self.offset_data, size))
+        let obj_mem_info = self.memory_pool.borrow_mut().attach_object(python_id)?;
+        Ok(self.slice_mut_from(obj_mem_info))
     }
 
     /// Un-mark object as used by current process.
@@ -154,10 +159,22 @@ impl<'a> ShmObjectPool<'a> {
     }
 
     /// Get memory offset of given object.
-    pub fn offset_of(&self, python_id: PythonId) -> Option<usize> {
+    pub fn slice_of(&self, python_id: PythonId) -> Option<&'_ mut [u8]> {
         let _guard = self.fs_mutex.lock().ok()?;
-        let offset = self.memory_pool.borrow().offset_of(python_id)?;
-        Some(offset + self.offset_data)
+        let obj_mem_info = self.memory_pool.borrow().info_of(python_id)?;
+
+        Some(self.slice_mut_from(obj_mem_info))
+    }
+
+    fn slice_mut_from(&self, obj_mem_info: ObjectInfo) -> &'_ mut [u8] {
+        let data_offset = obj_mem_info.offset() + self.offset_data;
+
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.shmem.as_ptr().add(data_offset),
+                obj_mem_info.size(),
+            )
+        }
     }
 }
 
@@ -279,31 +296,28 @@ mod tests {
             let pool2 = ShmObjectPool::open(segment_path)?;
 
             // Check pool is empty
-            assert_eq!(pool1.offset_of(python_id), None);
-            assert_eq!(pool2.offset_of(python_id), None);
+            assert_eq!(pool1.slice_of(python_id), None);
+            assert_eq!(pool2.slice_of(python_id), None);
 
             // Add object
             pool1.add_object(python_id, 100)?;
 
             // Check it is here in both pool
-            assert!(pool1.offset_of(python_id).is_some());
-            let offset = pool1.offset_of(python_id).unwrap();
-
-            assert_eq!(pool1.offset_of(python_id), Some(offset));
-            assert_eq!(pool2.offset_of(python_id), Some(offset));
+            assert!(pool1.slice_of(python_id).is_some());
+            assert!(pool2.slice_of(python_id).is_some());
 
             // Attach object from pool2, and detach from pool1
-            assert_eq!(pool2.attach_object(python_id), Ok((offset, 100)));
+            assert!(pool2.attach_object(python_id).is_ok());
             assert_eq!(pool1.detach_object(python_id), Ok(()));
 
-            assert_eq!(pool1.offset_of(python_id), Some(offset));
-            assert_eq!(pool2.offset_of(python_id), Some(offset));
+            assert!(pool1.slice_of(python_id).is_some());
+            assert!(pool2.slice_of(python_id).is_some());
 
             // Detach from pool2
             assert_eq!(pool2.detach_object(python_id), Ok(()));
 
-            assert_eq!(pool1.offset_of(python_id), None);
-            assert_eq!(pool2.offset_of(python_id), None);
+            assert_eq!(pool1.slice_of(python_id), None);
+            assert_eq!(pool2.slice_of(python_id), None);
 
             Ok(())
         }
