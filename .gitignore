@@ -2,3 +2,4 @@
 *.lock
 *.seg
 *.so
+__pycache__
