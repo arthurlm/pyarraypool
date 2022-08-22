@@ -140,7 +140,7 @@ impl<'a> ShmObjectPool<'a> {
             .borrow_mut()
             .add_object(python_id, request_size)?;
 
-        let obj_mem_info = ObjectInfo::new(offset + self.offset_data, request_size);
+        let obj_mem_info = ObjectInfo::new(offset, request_size);
         Ok(self.slice_mut_from(obj_mem_info))
     }
 
@@ -162,7 +162,6 @@ impl<'a> ShmObjectPool<'a> {
     pub fn slice_of(&self, python_id: PythonId) -> Option<&'_ mut [u8]> {
         let _guard = self.fs_mutex.lock().ok()?;
         let obj_mem_info = self.memory_pool.borrow().info_of(python_id)?;
-
         Some(self.slice_mut_from(obj_mem_info))
     }
 
