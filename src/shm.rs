@@ -324,5 +324,35 @@ mod tests {
 
             Ok(())
         }
+
+        #[test]
+        fn test_shared_data() -> anyhow::Result<()> {
+            let segment_path = "test_shared_data.seg";
+            let python_id = PythonId(20);
+
+            let pool1 = ShmObjectPoolBuilder::new()
+                .segment_path(segment_path)
+                .create()?;
+            let pool2 = ShmObjectPool::open(segment_path)?;
+
+            // Attach objects
+            let slice1 = pool1.add_object(python_id, 100)?;
+            let slice2 = pool2.attach_object(python_id)?;
+
+            // Update data and check it is reflected correctly
+            slice2[0] = 0x12;
+            assert_eq!(slice1[0], 0x12);
+            assert_eq!(slice2[0], 0x12);
+
+            slice1[0] = 0xAB;
+            assert_eq!(slice1[0], 0xAB);
+            assert_eq!(slice2[0], 0xAB);
+
+            slice1[10] = 0xFD;
+            assert_eq!(slice1[10], 0xFD);
+            assert_eq!(slice2[10], 0xFD);
+
+            Ok(())
+        }
     }
 }
