@@ -1,3 +1,4 @@
+import multiprocessing
 import pickle
 import tempfile
 from uuid import uuid1
@@ -160,3 +161,18 @@ class TestArrayProxy:
         assert (arr == arr2).all()
         assert (proxy == proxy2).all()
         assert (arr == proxy2).all()
+
+    def test_subprocess(self):
+        arr = np.arange(50)
+        proxy = pyarraypool.make_transferable(arr)
+
+        with multiprocessing.Pool(5) as pool:
+            pool.starmap(add_one, [
+                (proxy, i) for i in range(proxy.size)
+            ])
+
+        assert (proxy == arr + 1).all()
+
+
+def add_one(arr, idx):
+    arr[idx] += 1
