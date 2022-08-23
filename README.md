@@ -68,7 +68,7 @@ To build:
 
 ```sh
 pip install maturin
-maturin develop
+maturin develop --extras test
 ```
 
 To test:
