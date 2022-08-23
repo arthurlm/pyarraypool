@@ -6,7 +6,6 @@ from typing import Any, Iterator, Optional, Tuple, Union
 import weakref
 from .pyarraypool import ShmObjectPool
 import numpy as np
-import numpy.typing as npt
 
 MemorySizeType = Union[str, int]
 
