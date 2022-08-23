@@ -1,11 +1,13 @@
-from contextlib import contextmanager
 import logging
-from pathlib import Path
 import tempfile
-from typing import Any, Iterator, Optional, Tuple, Union
 import weakref
-from .pyarraypool import ShmObjectPool
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Iterator, Optional, Tuple, Union
+
 import numpy as np
+
+from .pyarraypool import ShmObjectPool
 
 MemorySizeType = Union[str, int]
 

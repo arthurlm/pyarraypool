@@ -1,7 +1,9 @@
-import pyarraypool
-import numpy as np
 import multiprocessing
 import time
+
+import numpy as np
+
+import pyarraypool
 
 
 def task_regular(x, value):

@@ -2,10 +2,11 @@ import multiprocessing
 import pickle
 import tempfile
 from uuid import uuid1
-import pyarraypool
-import pytest
 
 import numpy as np
+import pytest
+
+import pyarraypool
 
 
 class TestParseDataSize:
