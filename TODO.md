@@ -4,6 +4,7 @@
 - [x] POC / make it works !
 - [x] doc
 - [x] simple example
-- [ ] github repository
-- [ ] test + benchmark with process worker
-- [ ] CI
+- [x] github repository
+- [x] CI
+- [x] test + benchmark with process worker
+- [ ] Publish

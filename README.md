@@ -1,5 +1,9 @@
 # Pyarraypool
 
+![Licence](https://img.shields.io/github/license/arthurlm/pyarraypool)
+![Python build](https://img.shields.io/github/workflow/status/arthurlm/pyarraypool/Python?label=build%20python)
+![Rust build](https://img.shields.io/github/workflow/status/arthurlm/pyarraypool/Rust?label=build%20rust)
+
 Transfer numpy array between processes using shared memory.
 
 ## Why creating this project ?
