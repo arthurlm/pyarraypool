@@ -7,13 +7,36 @@ name = "pyarraypool"
 description = "Manage pool of array using shared memory"
 requires-python = ">=3.8"
 classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Unix",
     "Programming Language :: Rust",
+    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
+    "Topic :: Software Development :: Libraries",
 ]
 keywords = ["sharedmemory", "pool", "ndarray"]
 maintainers = [
-  {name = "Arthur LE MOIGNE", email = "arthur.lemoigne@gmail.com"}
+    {name = "Arthur LE MOIGNE", email = "arthur.lemoigne@gmail.com"}
+]
+readme = "README.md"
+repository = "git@github.com:arthurlm/pyarraypool.git"
+
+dependencies = [
+    "numpy",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov[all]",
+    "flake8",
+    "autopep8",
+    "isort",
+    "mypy",
 ]
 
 [tool.maturin]

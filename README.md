@@ -82,6 +82,7 @@ cargo clippy
 pytest -vv
 flake8
 autopep8 --diff -r python/
+mypy .
 ```
 
 To format code:
