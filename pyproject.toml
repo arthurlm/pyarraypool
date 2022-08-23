@@ -23,7 +23,6 @@ maintainers = [
     {name = "Arthur LE MOIGNE", email = "arthur.lemoigne@gmail.com"}
 ]
 readme = "README.md"
-repository = "git@github.com:arthurlm/pyarraypool.git"
 
 dependencies = [
     "numpy",
@@ -38,6 +37,10 @@ test = [
     "isort",
     "mypy",
 ]
+
+[project.urls]
+homepage = "https://github.com/arthurlm/pyarraypool"
+repository = "git@github.com:arthurlm/pyarraypool.git"
 
 [tool.maturin]
 python-source = "python"
