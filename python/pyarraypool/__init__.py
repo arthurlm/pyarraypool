@@ -96,13 +96,11 @@ def get_reusable_pool() -> ShmObjectPool:
     return _GLOBAL_POOL
 
 
-@contextmanager
-def object_pool(
+def start_pool(
     *,
-    slot_count: int = 10_000,
-    data_size: MemorySizeType = "512M",
     link_path: Optional[Union[Path, str]] = None,
-) -> Iterator[None]:
+    **kwargs
+) -> None:
     global _GLOBAL_POOL
 
     path = link_path or f"{tempfile.gettempdir()}/pyarraypool.seg"
@@ -111,10 +109,25 @@ def object_pool(
         raise PoolAlreadyExists()
 
     _GLOBAL_POOL = ShmObjectPool(
+        path=str(path),
+        **kwargs
+    )
+
+
+@contextmanager
+def object_pool(
+    *,
+    slot_count: int = 10_000,
+    data_size: MemorySizeType = "512M",
+    link_path: Optional[Union[Path, str]] = None,
+) -> Iterator[None]:
+    global _GLOBAL_POOL
+    start_pool(
+        link_path=link_path,
         slot_count=slot_count,
         data_size=_parse_datasize_to_bytes(data_size),
-        path=str(path),
     )
+
     LOGGER.info("Pool attached (data_size: %s)", data_size)
     try:
         yield
