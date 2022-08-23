@@ -96,7 +96,7 @@ impl PyShmObjectPool {
 }
 
 impl PyShmObjectPool {
-    fn pymemoryview_from_slice<'py>(&self, data: &mut [u8]) -> PyObject {
+    fn pymemoryview_from_slice(&self, data: &mut [u8]) -> PyObject {
         Python::with_gil(|py| unsafe {
             let memview_ptr = PyMemoryView_FromMemory(
                 data.as_mut_ptr() as *mut c_schar,
