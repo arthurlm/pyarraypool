@@ -1,5 +1,11 @@
 /target
-*.lock
 *.seg
 *.so
-__pycache__
+
+__pycache__/
+.ipynb_checkpoints/
+.mypy_cache/
+.pytest_cache/
+
+pyarraypool.lock
+test_*.lock
