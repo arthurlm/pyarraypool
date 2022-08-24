@@ -7,4 +7,5 @@
 - [x] github repository
 - [x] CI
 - [x] test + benchmark with process worker
+- [x] Check for fslock / spin lock sync primitive
 - [ ] Publish

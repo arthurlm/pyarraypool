@@ -8,7 +8,6 @@ name = "pyarraypool"
 crate-type = ["cdylib"]
 
 [dependencies]
-fslock = "0.2.1"
 shared_memory = "0.12.4"
 thiserror = "1.0.32"
 pyo3 = { version = "0.16.4", features = ["extension-module"] }

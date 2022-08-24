@@ -31,7 +31,7 @@ In this library:
 
 - shared memory is manage as a "pool".
 - array can be attached and are release when refcount reach 0 in every processes.
-- a filelock is used to manage sync between process when bloc are add / removed (this can be improved).
+- a spinlock is used to manage sync between process when bloc are add / removed (this can be improved).
 
 ## API usage
 

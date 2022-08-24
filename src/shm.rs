@@ -12,7 +12,7 @@ use thiserror::Error;
 
 use crate::{
     memory_info::{ArrayPoolError, MemoryPool, MemorySlot, ObjectInfo, PythonId},
-    mutex::FsMutex,
+    mutex::{SimpleSpinLock, SimpleSpinLockGuard},
 };
 
 const SHM_HEADER_MAGIC: u64 = 0xFF45_9831_ABAB_0001;
@@ -47,12 +47,6 @@ impl From<ShmemError> for ShmError {
     }
 }
 
-impl From<fslock::Error> for ShmError {
-    fn from(err: fslock::Error) -> Self {
-        Self::FileSystemError(err.to_string())
-    }
-}
-
 /// Header of shm.
 ///
 /// Helps to check if module is correctly map to a valid shm segment.
@@ -62,6 +56,7 @@ pub struct ShmHeader {
     magic: u64,
     version: u8,
     slot_count: usize,
+    spin_lock: SimpleSpinLock,
 }
 
 impl ShmHeader {
@@ -71,6 +66,7 @@ impl ShmHeader {
             magic: SHM_HEADER_MAGIC,
             version: SHM_VERSION,
             slot_count,
+            spin_lock: SimpleSpinLock::new(),
         }
     }
 
@@ -84,12 +80,17 @@ impl ShmHeader {
             Ok(())
         }
     }
+
+    /// Acquire memory lock
+    pub fn lock(&self) -> SimpleSpinLockGuard<'_> {
+        self.spin_lock.lock()
+    }
 }
 
 /// Shm bind memory object pool.
 pub struct ShmObjectPool<'a> {
     shmem: Shmem,
-    fs_mutex: FsMutex,
+    header: &'a ShmHeader,
     memory_pool: RefCell<MemoryPool<'a>>,
     offset_data: usize,
     _marker: PhantomData<&'a Shmem>,
@@ -104,7 +105,6 @@ impl<'a> ShmObjectPool<'a> {
         // Open SHM and lockfile
         let segment_path = segment_path.as_ref();
         let shmem = ShmemConf::new().flink(segment_path).open()?;
-        let fs_mutex = FsMutex::open(&segment_path.with_extension("lock"))?;
 
         let raw_ptr = shmem.as_ptr();
 
@@ -123,7 +123,7 @@ impl<'a> ShmObjectPool<'a> {
         // Create struct
         Ok(ShmObjectPool {
             shmem,
-            fs_mutex,
+            header,
             memory_pool: RefCell::new(MemoryPool::new(slots)),
             offset_data: SHM_HEADER_SIZE + header.slot_count * MEMORY_SLOT_SIZE,
             _marker: PhantomData,
@@ -136,7 +136,7 @@ impl<'a> ShmObjectPool<'a> {
         python_id: PythonId,
         request_size: usize,
     ) -> Result<&'_ mut [u8], ShmError> {
-        let _guard = self.fs_mutex.lock()?;
+        let _guard = self.header.lock();
         let offset = self
             .memory_pool
             .borrow_mut()
@@ -148,21 +148,21 @@ impl<'a> ShmObjectPool<'a> {
 
     /// Mark object as used by current process.
     pub fn attach_object(&self, python_id: PythonId) -> Result<&'_ mut [u8], ShmError> {
-        let _guard = self.fs_mutex.lock()?;
+        let _guard = self.header.lock();
         let obj_mem_info = self.memory_pool.borrow_mut().attach_object(python_id)?;
         Ok(self.slice_mut_from(obj_mem_info))
     }
 
     /// Un-mark object as used by current process.
     pub fn detach_object(&self, python_id: PythonId) -> Result<(), ShmError> {
-        let _guard = self.fs_mutex.lock()?;
+        let _guard = self.header.lock();
         self.memory_pool.borrow_mut().detach_object(python_id)?;
         Ok(())
     }
 
     /// Get memory offset of given object.
     pub fn slice_of(&self, python_id: PythonId) -> Option<&'_ mut [u8]> {
-        let _guard = self.fs_mutex.lock().ok()?;
+        let _guard = self.header.lock();
         let obj_mem_info = self.memory_pool.borrow().info_of(python_id)?;
         Some(self.slice_mut_from(obj_mem_info))
     }
@@ -233,7 +233,6 @@ impl ShmObjectPoolBuilder {
             .size(size)
             .flink(&self.segment_path)
             .create()?;
-        let fs_mutex = FsMutex::open(&self.segment_path.with_extension("lock"))?;
 
         let raw_ptr = shmem.as_ptr();
 
@@ -251,7 +250,7 @@ impl ShmObjectPoolBuilder {
 
         Ok(ShmObjectPool {
             shmem,
-            fs_mutex,
+            header,
             memory_pool: RefCell::new(MemoryPool::from_uninit_slice(slots, self.data_size)),
             offset_data: SHM_HEADER_SIZE + header.slot_count * MEMORY_SLOT_SIZE,
             _marker: PhantomData,

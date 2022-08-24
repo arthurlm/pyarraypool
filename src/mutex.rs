@@ -1,41 +1,43 @@
-use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use fslock::{LockFile, ToOsStr};
-
+/// Simple spin lock based on atomic u8
+///
+/// See: https://doc.rust-lang.org/nomicon/atomics.html
 #[derive(Debug)]
-pub struct FsMutex {
-    lockfile: RefCell<LockFile>,
+pub struct SimpleSpinLock {
+    lock: AtomicBool,
 }
 
-impl FsMutex {
-    pub fn open<P>(path: &P) -> Result<Self, fslock::Error>
-    where
-        P: ToOsStr + ?Sized,
-    {
-        let lockfile = RefCell::new(LockFile::open(path)?);
-        Ok(Self { lockfile })
+impl SimpleSpinLock {
+    /// Init spin lock
+    pub const fn new() -> Self {
+        Self {
+            lock: AtomicBool::new(false),
+        }
     }
 
-    pub fn lock(&self) -> Result<LockFileGuard<'_>, fslock::Error> {
-        self.lockfile.borrow_mut().lock()?;
-        Ok(LockFileGuard {
-            lockfile: &self.lockfile,
-        })
+    pub fn lock(&self) -> SimpleSpinLockGuard<'_> {
+        while self
+            .lock
+            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Acquire)
+            .is_err()
+        {}
+
+        SimpleSpinLockGuard { lock: &self.lock }
     }
 
     pub fn is_locked(&self) -> bool {
-        self.lockfile.borrow().owns_lock()
+        self.lock.load(Ordering::Relaxed)
     }
 }
 
-#[derive(Debug)]
-pub struct LockFileGuard<'a> {
-    lockfile: &'a RefCell<LockFile>,
+pub struct SimpleSpinLockGuard<'a> {
+    lock: &'a AtomicBool,
 }
 
-impl<'a> Drop for LockFileGuard<'a> {
+impl<'a> Drop for SimpleSpinLockGuard<'a> {
     fn drop(&mut self) {
-        let _ = self.lockfile.borrow_mut().unlock();
+        self.lock.store(false, Ordering::Release);
     }
 }
 
@@ -44,17 +46,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_fs_mutex() -> anyhow::Result<()> {
-        let mutex = FsMutex::open("test_fs_mutex.lock")?;
+    fn test_mutex() {
+        let mutex = SimpleSpinLock::new();
 
         assert!(!mutex.is_locked());
 
         {
-            let _guard = mutex.lock()?;
+            let _guard = mutex.lock();
             assert!(mutex.is_locked());
         }
 
         assert!(!mutex.is_locked());
-        Ok(())
     }
 }
