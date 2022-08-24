@@ -11,28 +11,33 @@ Transfer numpy array between processes using shared memory.
 
 ## Why creating this project ?
 
-This library aims to speed up parallel data processing with python and numpy NDArray.
+This library aims to speed up parallel data processing with CPython and [numpy](https://numpy.org/) NDArray.
 
 Python GIL does not permit to use multithreading for parallel data processing.
-It is indeed release when C code / Cython / IO tasks are done but it is still lock for computation tasks.
+It is indeed release when C code / Cython (nogil) / IO tasks are done but it is still lock for computation tasks.
 
 Alternative to subprocess worker exists but they are not always possible to use.
 To list few of them:
 
-- numba
-- switching from [cpython](https://github.com/python/cpython) to [pypy](https://www.pypy.org/)
+- [numba](https://numba.pydata.org/)
+- switching from [CPython](https://github.com/python/cpython) to [PyPy](https://www.pypy.org/)
 - rewrite code using C / Cython / Rust
+
+> Why not using numpy builtin mmap ?
+
+Numpy builtin [memory mapping](https://numpy.org/doc/stable/reference/generated/numpy.memmap.html) is made to manage a single numpy array.
+It is not made to manage multiple "small" array that are frequently created / destroy.
 
 ## Few design choices
 
 Python standard library already contains a module to create and manage [shared memory](https://docs.python.org/3/library/multiprocessing.shared_memory.html).
 
-However it does not permit to manage it as a raw bloc.
+However it does not permit to manage it as a RAW bloc safely and easily.
 So performances drop because several system call must be done on each bloc creation / deletion.
 
 In this library:
 
-- shared memory is manage as a "pool".
+- shared memory is manage as a "pool" using Rust and low level CPython API.
 - array can be attached and are release when refcount reach 0 in every processes.
 - a spinlock is used to manage sync between process when bloc are add / removed (this can be improved).
 
