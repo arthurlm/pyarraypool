@@ -163,6 +163,13 @@ class TestArrayProxy:
         assert (proxy == proxy2).all()
         assert (arr == proxy2).all()
 
+    def test_pickling_slice(self):
+        arr = np.arange(1000).reshape((100, 10))
+        proxy = pyarraypool.make_transferable(arr)
+
+        with pytest.raises(ValueError, match="Cannot transfer none registered object"):
+            pickle.dumps(proxy[0, :])
+
     def test_subprocess(self):
         arr = np.arange(50)
         proxy = pyarraypool.make_transferable(arr)

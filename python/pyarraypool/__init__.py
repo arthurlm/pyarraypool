@@ -49,6 +49,8 @@ class ndarrayproxy(np.ndarray):
 
     def __reduce__(self) -> Tuple[Any, ...]:
         # Check: https://docs.python.org/3/library/pickle.html#object.__reduce__
+        if self.python_id == 0:
+            raise ValueError("Cannot transfer none registered object (did you try sending slice ?)")
 
         return (
             # Builder
