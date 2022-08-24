@@ -3,6 +3,9 @@
 ![Licence](https://img.shields.io/github/license/arthurlm/pyarraypool)
 ![Python build](https://img.shields.io/github/workflow/status/arthurlm/pyarraypool/Python?label=build%20python)
 ![Rust build](https://img.shields.io/github/workflow/status/arthurlm/pyarraypool/Rust?label=build%20rust)
+![PyPI](https://img.shields.io/pypi/v/pyarraypool)
+![PyPI - Implementation](https://img.shields.io/pypi/implementation/pyarraypool)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pyarraypool)
 
 Transfer numpy array between processes using shared memory.
 
