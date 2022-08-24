@@ -6,6 +6,7 @@ build-backend = "maturin"
 name = "pyarraypool"
 description = "Manage pool of array using shared memory"
 requires-python = ">=3.8"
+license = {file = "LICENSE"}
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Information Technology",
@@ -20,7 +21,7 @@ classifiers = [
 ]
 keywords = ["sharedmemory", "pool", "ndarray"]
 maintainers = [
-    {name = "Arthur LE MOIGNE", email = "arthur.lemoigne@gmail.com"}
+    {name = "Arthur LE MOIGNE", email = "arthurlm@users.noreply.github.com"}
 ]
 readme = "README.md"
 
@@ -39,8 +40,7 @@ test = [
 ]
 
 [project.urls]
-homepage = "https://github.com/arthurlm/pyarraypool"
-repository = "git@github.com:arthurlm/pyarraypool.git"
+Source = "https://github.com/arthurlm/pyarraypool"
 
 [tool.maturin]
 python-source = "python"
