@@ -7,12 +7,7 @@ pub mod memory_info;
 mod mutex;
 pub mod shm;
 
-use std::{
-    os::raw::c_schar,
-    path::PathBuf,
-    str::FromStr,
-    sync::{Arc, Mutex},
-};
+use std::{os::raw::c_schar, path::PathBuf, str::FromStr, sync::Arc};
 
 use memory_info::PythonId;
 use pyo3::{
@@ -36,7 +31,7 @@ impl From<ShmError> for PyErr {
     text_signature = "(*, slot_count = ..., data_size = ..., path = ...)"
 )]
 struct PyShmObjectPool {
-    pool: Arc<Mutex<ShmObjectPool<'static>>>,
+    pool: Arc<ShmObjectPool<'static>>,
 }
 
 unsafe impl Send for PyShmObjectPool {}
@@ -64,33 +59,28 @@ impl PyShmObjectPool {
         };
 
         Ok(Self {
-            pool: Arc::new(Mutex::new(pool)),
+            pool: Arc::new(pool),
         })
     }
 
     fn add_object(&self, python_id: u64, request_size: usize) -> PyResult<PyObject> {
-        let pool = self.pool.lock().expect("Pool poisoned");
-        let data = pool.add_object(PythonId(python_id), request_size)?;
+        let data = self.pool.add_object(PythonId(python_id), request_size)?;
         Ok(self.pymemoryview_from_slice(data))
     }
 
     fn attach_object(&self, python_id: u64) -> PyResult<PyObject> {
-        let pool = self.pool.lock().expect("Pool poisoned");
-        let data = pool.attach_object(PythonId(python_id))?;
+        let data = self.pool.attach_object(PythonId(python_id))?;
         Ok(self.pymemoryview_from_slice(data))
     }
 
     fn detach_object(&self, python_id: u64) -> PyResult<()> {
         self.pool
-            .lock()
-            .expect("Pool poisoned")
             .detach_object(PythonId(python_id))
             .map_err(|e| e.into())
     }
 
     fn memview_of(&self, python_id: u64) -> Option<PyObject> {
-        let pool = self.pool.lock().expect("Pool poisoned");
-        let data = pool.slice_of(PythonId(python_id))?;
+        let data = self.pool.slice_of(PythonId(python_id))?;
         Some(self.pymemoryview_from_slice(data))
     }
 }
