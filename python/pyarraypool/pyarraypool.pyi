@@ -1,3 +1,6 @@
+from typing import Optional
+
+
 class ShmObjectPool:
     def __init__(
         self, *,
@@ -7,21 +10,14 @@ class ShmObjectPool:
     ) -> None:
         ...
 
-    def add_object(
-        self,
-        python_id: int,
-        request_size: int,
-    ) -> memoryview:
+    def add_object(self, python_id: int, request_size: int) -> memoryview:
         ...
 
-    def attach_object(
-        self,
-        python_id: int,
-    ) -> memoryview:
+    def attach_object(self, python_id: int) -> memoryview:
         ...
 
-    def detach_object(
-        self,
-        python_id: int,
-    ) -> None:
+    def detach_object(self, python_id: int) -> None:
+        ...
+
+    def memview_of(self, python_id: int) -> Optional[memoryview]:
         ...

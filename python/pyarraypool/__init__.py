@@ -84,11 +84,24 @@ def make_transferable(arr: np.ndarray) -> ndarrayproxy:
     python_id = id(arr)
 
     pool = get_reusable_pool()
-    memview = pool.add_object(python_id, arr.size * arr.itemsize)
 
+    if pool.memview_of(python_id) is None:
+        # Check if object is already registered in pool
+        memview = pool.add_object(python_id, arr.size * arr.itemsize)
+        data_not_set = True
+    else:
+        # Otherwise attach to memory view
+        memview = pool.attach_object(python_id)
+        assert memview.nbytes == arr.size * arr.itemsize
+        data_not_set = False
+
+    # Create proxy object
     out = ndarrayproxy(arr.shape, dtype=arr.dtype, buffer=memview)
     out.python_id = python_id
-    out[:] = arr[:]
+
+    # Set data
+    if data_not_set:
+        out[:] = arr[:]
 
     weakref.finalize(out, pool.detach_object, python_id)
     return out

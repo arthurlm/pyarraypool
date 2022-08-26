@@ -174,6 +174,14 @@ class TestArrayProxy:
 
         assert (proxy == arr + 1).all()
 
+    def test_multiple_register(self):
+        arr = np.arange(50)
+        proxy1 = pyarraypool.make_transferable(arr)
+        proxy2 = pyarraypool.make_transferable(arr)
+
+        assert (proxy1 == arr).all()
+        assert (proxy2 == arr).all()
+
 
 def add_one(arr, idx):
     arr[idx] += 1
