@@ -1,7 +1,5 @@
 import multiprocessing
 import pickle
-import tempfile
-from uuid import uuid1
 
 import numpy as np
 import pytest
@@ -40,15 +38,6 @@ class TestParseDataSize:
     def test_invalid_value(self, value: pyarraypool.MemorySizeType) -> None:
         with pytest.raises(ValueError):
             pyarraypool._parse_datasize_to_bytes(value)
-
-
-@pytest.fixture(autouse=True)
-def autoconfigure_pool() -> None:
-    pyarraypool.configure_global_pool(
-        link_path=f"{tempfile.gettempdir()}/test_pool_{uuid1()}.seg",
-        slot_count=50,
-        data_size="64M",
-    )
 
 
 def assert_pool_off() -> None:

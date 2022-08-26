@@ -61,9 +61,10 @@ def main():
     arr = np.random.random((100, 200, 500))
     I, J, K = arr.shape
 
-    with multiprocessing.Pool(processes=8, initializer=pyarraypool.start_pool) as pool, \
-            pyarraypool.object_pool_context():
-        # Transfer the array to shared memory
+    with multiprocessing.Pool(processes=8) as pool:
+        # Transfer the array to shared memory.
+        #
+        # Segment will be created automatically on first `make_transferable` call.
         shmarr = pyarraypool.make_transferable(arr)
 
         # Apply task to array

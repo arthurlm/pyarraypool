@@ -17,6 +17,7 @@ _GLOBAL_POOL: Optional[ShmObjectPool] = None
 _CFG_LINK_PATH = f"{tempfile.gettempdir()}/pyarraypool.seg"
 _CFG_SLOT_COUNT: int = 10_000
 _CFG_DATA_SIZE: int = 512 * (1024 ** 2)
+_CFG_AUTOSTART: bool = True
 
 
 class PoolAlreadyExists(Exception):
@@ -94,7 +95,10 @@ def make_transferable(arr: np.ndarray) -> ndarrayproxy:
 
 
 def get_reusable_pool() -> ShmObjectPool:
-    global _GLOBAL_POOL
+    global _GLOBAL_POOL, _CFG_AUTOSTART
+
+    if _GLOBAL_POOL is None and _CFG_AUTOSTART:
+        start_pool()
 
     if _GLOBAL_POOL is None:
         raise PoolNotRunning()
@@ -128,8 +132,9 @@ def configure_global_pool(
     link_path: Optional[Union[Path, str]] = None,
     slot_count: Optional[int] = None,
     data_size: Optional[MemorySizeType] = None,
+    autostart: Optional[bool] = None
 ) -> None:
-    global _CFG_LINK_PATH, _CFG_SLOT_COUNT, _CFG_DATA_SIZE
+    global _CFG_LINK_PATH, _CFG_SLOT_COUNT, _CFG_DATA_SIZE, _CFG_AUTOSTART
 
     if link_path is not None:
         _CFG_LINK_PATH = str(link_path)
@@ -140,10 +145,12 @@ def configure_global_pool(
     if data_size is not None:
         _CFG_DATA_SIZE = _parse_datasize_to_bytes(data_size)
 
+    if autostart is not None:
+        _CFG_AUTOSTART = autostart
+
 
 @contextmanager
 def object_pool_context() -> Iterator[None]:
-    global _GLOBAL_POOL, _CFG_DATA_SIZE
     start_pool()
 
     try:
