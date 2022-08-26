@@ -157,3 +157,17 @@ def object_pool_context() -> Iterator[None]:
         yield
     finally:
         stop_pool()
+
+
+def cleanup_shm():
+    """Remove previous SHM if any."""
+    link_path = Path(_CFG_LINK_PATH)
+    if not link_path.exists():
+        return
+
+    segment_name = link_path.read_text().strip("/")
+    segment_path = Path("/dev/shm") / segment_name
+
+    LOGGER.info("Removing SHM segment: %s", segment_path)
+    link_path.unlink(missing_ok=True)
+    segment_path.unlink(missing_ok=True)

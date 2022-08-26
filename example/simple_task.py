@@ -93,6 +93,10 @@ def _main_shm_autostart():
 
 
 if __name__ == "__main__":
+    # Clear any previous SHM if found
+    pyarraypool.cleanup_shm()
+
+    # Run main
     _main_classic()
     _main_shm_manualmanagement()
     _main_shm_autostart()
