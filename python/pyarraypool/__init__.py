@@ -14,6 +14,9 @@ MemorySizeType = Union[str, int]
 LOGGER = logging.getLogger(__name__)
 
 _GLOBAL_POOL: Optional[ShmObjectPool] = None
+_CFG_LINK_PATH = f"{tempfile.gettempdir()}/pyarraypool.seg"
+_CFG_SLOT_COUNT: int = 10_000
+_CFG_DATA_SIZE: int = 512 * (1024 ** 2)
 
 
 class PoolAlreadyExists(Exception):
@@ -99,41 +102,51 @@ def get_reusable_pool() -> ShmObjectPool:
     return _GLOBAL_POOL
 
 
-def start_pool(
-    *,
-    link_path: Optional[Union[Path, str]] = None,
-    **kwargs
-) -> None:
-    global _GLOBAL_POOL
-
-    path = link_path or f"{tempfile.gettempdir()}/pyarraypool.seg"
+def start_pool() -> None:
+    global _GLOBAL_POOL, _CFG_LINK_PATH, _CFG_DATA_SIZE, _CFG_SLOT_COUNT
 
     if _GLOBAL_POOL is not None:
         raise PoolAlreadyExists()
 
     _GLOBAL_POOL = ShmObjectPool(
-        path=str(path),
-        **kwargs
+        path=_CFG_LINK_PATH,
+        data_size=_CFG_DATA_SIZE,
+        slot_count=_CFG_SLOT_COUNT,
     )
+    LOGGER.info("Pool attached (data_size: %d bytes, slot_count: %d)", _CFG_DATA_SIZE, _CFG_SLOT_COUNT)
+
+
+def stop_pool() -> None:
+    global _GLOBAL_POOL
+
+    _GLOBAL_POOL = None
+    LOGGER.info("Pool detached")
+
+
+def configure_global_pool(
+    *,
+    link_path: Optional[Union[Path, str]] = None,
+    slot_count: Optional[int] = None,
+    data_size: Optional[MemorySizeType] = None,
+) -> None:
+    global _CFG_LINK_PATH, _CFG_SLOT_COUNT, _CFG_DATA_SIZE
+
+    if link_path is not None:
+        _CFG_LINK_PATH = str(link_path)
+
+    if slot_count is not None:
+        _CFG_SLOT_COUNT = slot_count
+
+    if data_size is not None:
+        _CFG_DATA_SIZE = _parse_datasize_to_bytes(data_size)
 
 
 @contextmanager
-def object_pool(
-    *,
-    slot_count: int = 10_000,
-    data_size: MemorySizeType = "512M",
-    link_path: Optional[Union[Path, str]] = None,
-) -> Iterator[None]:
-    global _GLOBAL_POOL
-    start_pool(
-        link_path=link_path,
-        slot_count=slot_count,
-        data_size=_parse_datasize_to_bytes(data_size),
-    )
+def object_pool_context() -> Iterator[None]:
+    global _GLOBAL_POOL, _CFG_DATA_SIZE
+    start_pool()
 
-    LOGGER.info("Pool attached (data_size: %s)", data_size)
     try:
         yield
     finally:
-        _GLOBAL_POOL = None
-        LOGGER.info("Pool detached")
+        stop_pool()

@@ -13,13 +13,16 @@ Transfer numpy array between processes using shared memory.
 
 This library aims to speed up parallel data processing with CPython and [numpy](https://numpy.org/) NDArray.
 
-Python GIL does not permit to use multithreading for parallel data processing.
-It is indeed release when C code / Cython (nogil) / IO tasks are done but it is still lock for computation tasks.
+> What is the issue with regular python multitasking ?
+
+Python [GIL](https://wiki.python.org/moin/GlobalInterpreterLock) does not permit to use multithreading for parallel data processing.
+It is indeed release when C code / [Cython (nogil)](https://cython.readthedocs.io/en/latest/src/userguide/parallelism.html#using-parallelism) / IO tasks are done but it is still lock for computation tasks.
+This is why subprocess are often used to have multiple processing task done.
 
 Alternative to subprocess worker exists but they are not always possible to use.
 To list few of them:
 
-- [numba](https://numba.pydata.org/)
+- [numba](https://numba.pydata.org/) with `prange`
 - switching from [CPython](https://github.com/python/cpython) to [PyPy](https://www.pypy.org/)
 - rewrite code using C / Cython / Rust
 
@@ -51,15 +54,15 @@ import multiprocessing
 import numpy as np
 
 def task(x, i, value):
-    # Define a dummy task
+    # Define a dummy task than read and write to shared numpy array
     x[i, :, :] = value
 
 def main():
     arr = np.random.random((100, 200, 500))
     I, J, K = arr.shape
 
-    with multiprocessing.get_context("spawn").Pool(processes=8, initializer=pyarraypool.start_pool) as pool, \
-            pyarraypool.object_pool():
+    with multiprocessing.Pool(processes=8, initializer=pyarraypool.start_pool) as pool, \
+            pyarraypool.object_pool_context():
         # Transfer the array to shared memory
         shmarr = pyarraypool.make_transferable(arr)
 
@@ -99,7 +102,7 @@ mypy .
 
 To format code:
 
-```
+```sh
 autopep8 -ir python/
 isort .
 ```
@@ -109,7 +112,7 @@ isort .
 Project is currently a "POC" and not fully ready for production.
 
 Few benchmark are still missing.
-API can be improved.
+API can be improved and may change in near future.
 
 See `TODO.md` for more details.
 

@@ -48,7 +48,7 @@ def _main_shm():
     #
     # Init memory array pool
     with multiprocessing.Pool(processes=8, initializer=pyarraypool.start_pool) as pool, \
-            pyarraypool.object_pool():
+            pyarraypool.object_pool_context():
         t_start = time.perf_counter()
         # Transfer the array to shared memory
         shmarr = pyarraypool.make_transferable(arr)

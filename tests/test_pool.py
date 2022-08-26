@@ -42,9 +42,13 @@ class TestParseDataSize:
             pyarraypool._parse_datasize_to_bytes(value)
 
 
-@pytest.fixture
-def link_path() -> str:
-    return f"{tempfile.gettempdir()}/test_pool_{uuid1()}.seg"
+@pytest.fixture(autouse=True)
+def autoconfigure_pool() -> None:
+    pyarraypool.configure_global_pool(
+        link_path=f"{tempfile.gettempdir()}/test_pool_{uuid1()}.seg",
+        slot_count=50,
+        data_size="64M",
+    )
 
 
 def assert_pool_off() -> None:
@@ -57,26 +61,26 @@ def assert_pool_on() -> None:
 
 
 class TestPoolLifecycle:
-    def test_basic(self, link_path: str) -> None:
+    def test_basic(self) -> None:
         # Pool off
         assert_pool_off()
 
-        with pyarraypool.object_pool(link_path=link_path):
+        with pyarraypool.object_pool_context():
             # Pool running
             assert_pool_on()
 
         # Pool stopped
         assert_pool_off()
 
-    def test_init_twice(self, link_path: str) -> None:
+    def test_init_twice(self) -> None:
         assert_pool_off()
 
-        with pyarraypool.object_pool(link_path=link_path):
+        with pyarraypool.object_pool_context():
             assert_pool_on()
 
             # Check error is raised
             with pytest.raises(pyarraypool.PoolAlreadyExists):
-                with pyarraypool.object_pool(link_path=link_path):
+                with pyarraypool.object_pool_context():
                     ...
 
             # Check if pool is still running
@@ -84,30 +88,30 @@ class TestPoolLifecycle:
 
         assert_pool_off()
 
-    def test_init_and_release_multiple(self, link_path: str) -> None:
+    def test_init_and_release_multiple(self) -> None:
         assert_pool_off()
 
-        with pyarraypool.object_pool(link_path=link_path):
+        with pyarraypool.object_pool_context():
             assert_pool_on()
         assert_pool_off()
 
-        with pyarraypool.object_pool(link_path=link_path):
+        with pyarraypool.object_pool_context():
             assert_pool_on()
         assert_pool_off()
 
-        with pyarraypool.object_pool(link_path=link_path):
+        with pyarraypool.object_pool_context():
             assert_pool_on()
         assert_pool_off()
 
-    def test_attach_not_running(self, link_path: str) -> None:
+    def test_attach_not_running(self) -> None:
         with pytest.raises(pyarraypool.PoolNotRunning):
             pyarraypool.get_reusable_pool()
 
-    def test_clear_if_crash_and_attach(self, link_path: str) -> None:
+    def test_clear_if_crash_and_attach(self) -> None:
         assert_pool_off()
 
         with pytest.raises(ValueError):
-            with pyarraypool.object_pool(link_path=link_path):
+            with pyarraypool.object_pool_context():
                 assert_pool_on()
                 raise ValueError(":(")
 
@@ -116,8 +120,8 @@ class TestPoolLifecycle:
 
 class TestArrayProxy:
     @pytest.fixture(autouse=True)
-    def shm_ctx(self, link_path):
-        with pyarraypool.object_pool(link_path=link_path):
+    def shm_ctx(self):
+        with pyarraypool.object_pool_context():
             yield
 
     def test_has_python_id(self):
