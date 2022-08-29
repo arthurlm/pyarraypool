@@ -182,6 +182,10 @@ class TestArrayProxy:
         assert (proxy1 == arr).all()
         assert (proxy2 == arr).all()
 
+    def test_autoclean(self):
+        arr = np.arange(50)
+        pyarraypool.make_transferable(arr, transfer_required=False)
+
 
 def add_one(arr, idx):
     arr[idx] += 1

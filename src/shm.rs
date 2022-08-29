@@ -160,6 +160,15 @@ impl<'a> ShmObjectPool<'a> {
         Ok(())
     }
 
+    /// Set object as releasable from pool and hijack GC.
+    pub fn set_object_releasable(&self, python_id: PythonId) -> Result<(), ShmError> {
+        let _guard = self.header.lock();
+        self.memory_pool
+            .borrow_mut()
+            .set_object_releasable(python_id)?;
+        Ok(())
+    }
+
     /// Get memory offset of given object.
     pub fn slice_of(&self, python_id: PythonId) -> Option<&'_ mut [u8]> {
         let _guard = self.header.lock();
@@ -309,6 +318,7 @@ mod tests {
             assert!(pool2.slice_of(python_id).is_some());
 
             // Attach object from pool2, and detach from pool1
+            assert!(pool2.set_object_releasable(python_id).is_ok());
             assert!(pool2.attach_object(python_id).is_ok());
             assert_eq!(pool1.detach_object(python_id), Ok(()));
 

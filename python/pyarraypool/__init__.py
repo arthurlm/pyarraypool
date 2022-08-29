@@ -83,7 +83,7 @@ class ndarrayproxy(np.ndarray):
         return out
 
 
-def make_transferable(arr: np.ndarray) -> ndarrayproxy:
+def make_transferable(arr: np.ndarray, *, transfer_required: bool = True) -> ndarrayproxy:
     python_id = hash((id(arr), os.getpid())) % _MAX_PYTHON_ID
 
     pool = get_reusable_pool()
@@ -105,6 +105,10 @@ def make_transferable(arr: np.ndarray) -> ndarrayproxy:
     # Set data
     if data_not_set:
         out[:] = arr[:]
+
+    # Mark object as transferable free
+    if not transfer_required:
+        pool.set_object_releasable(python_id)
 
     weakref.finalize(out, pool.detach_object, python_id)
     return out

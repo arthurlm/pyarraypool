@@ -1,5 +1,7 @@
 /*! Helper to manage memory block. */
 
+use std::process;
+
 use thiserror::Error;
 
 /// Possible error that can occurs with memory pool management.
@@ -45,6 +47,8 @@ impl PythonId {
     }
 }
 
+const FLAG_MEMSLOT_TRANSFERED: u8 = 0x01;
+
 /// Store information about memory hole.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(C)]
@@ -57,6 +61,16 @@ pub struct MemorySlot {
 
     /// Reference object count.
     refcount: usize,
+
+    /// Source process ID
+    ///
+    /// This will be used to compute flags.
+    source_pid: u32,
+
+    /// Associated flags:
+    ///
+    /// - FLAG_MEMSLOT_TRANSFERED
+    flags: u8,
 }
 
 impl MemorySlot {
@@ -66,6 +80,8 @@ impl MemorySlot {
             python_id: PythonId::empty(),
             size: 0,
             refcount: 0,
+            source_pid: 0,
+            flags: 0,
         }
     }
 
@@ -75,21 +91,32 @@ impl MemorySlot {
             python_id: PythonId::empty(),
             size,
             refcount: 0,
+            source_pid: 0,
+            flags: 0,
         }
     }
 
     /// Create new slot with python ID and object size.
-    const fn with_object_id(python_id: PythonId, size: usize) -> Self {
+    fn with_object_id(python_id: PythonId, size: usize) -> Self {
         Self {
             python_id,
             size,
             refcount: 1,
+            source_pid: process::id(),
+            flags: 0,
         }
     }
 
     /// Check if slot is free.
     const fn is_free(&self) -> bool {
         self.python_id.0 == 0
+    }
+
+    /// Check if slot can be release.
+    ///
+    /// IE. Object has been transfered at least once between processes and is unused.
+    const fn is_releasable(&self) -> bool {
+        (self.flags & FLAG_MEMSLOT_TRANSFERED == FLAG_MEMSLOT_TRANSFERED) && (self.refcount == 0)
     }
 
     /// Split block to create new free space.
@@ -100,15 +127,30 @@ impl MemorySlot {
                 python_id: self.python_id,
                 size: bytes_count,
                 refcount: self.refcount,
+                source_pid: self.source_pid,
+                flags: self.flags,
             },
             Self::with_size(self.size - bytes_count),
         )
     }
 
     /// Set reference count.
-    fn set_refcount(mut self, refcount: usize) -> Self {
+    fn set_refcount(&mut self, refcount: usize) -> Self {
         self.refcount = refcount;
-        self
+        *self
+    }
+
+    /// Mark memory slot as transfered between processes.
+    fn set_transfered(&mut self) -> Self {
+        self.flags |= FLAG_MEMSLOT_TRANSFERED;
+        *self
+    }
+
+    /// Update internal flags based.
+    fn update_flags(&mut self) {
+        if self.source_pid != process::id() {
+            self.set_transfered();
+        }
     }
 }
 
@@ -219,8 +261,9 @@ impl<'a> MemoryPool<'a> {
             .position(|slot| slot.python_id == python_id)
             .ok_or(ArrayPoolError::ObjectNotFound)?;
 
-        // Increase refcount
+        // Increase refcount and update internals
         self.slots[object_index].refcount += 1;
+        self.slots[object_index].update_flags();
 
         Ok(ObjectInfo::new(
             self.offset_by_index(object_index),
@@ -234,18 +277,52 @@ impl<'a> MemoryPool<'a> {
     pub fn detach_object(&mut self, python_id: PythonId) -> Result<(), ArrayPoolError> {
         python_id.valid()?;
 
-        let slot_len = self.slots.len();
         let object_index = self
             .slots
             .iter()
             .position(|slot| slot.python_id == python_id)
             .ok_or(ArrayPoolError::ObjectNotFound)?;
 
-        // Decrease reference count and stop detaching if other process still use it.
-        self.slots[object_index].refcount -= 1;
+        // Decrease reference count and release slot if now unused.
         if self.slots[object_index].refcount > 0 {
-            return Ok(());
+            self.slots[object_index].refcount -= 1;
         }
+
+        if self.slots[object_index].is_releasable() {
+            self.release_offset(object_index);
+        }
+
+        Ok(())
+    }
+
+    /// Set python ID object as now releasable. Even if it has not been transfered
+    /// between processes.
+    pub fn set_object_releasable(&mut self, python_id: PythonId) -> Result<(), ArrayPoolError> {
+        python_id.valid()?;
+        let object_index = self
+            .slots
+            .iter()
+            .position(|slot| slot.python_id == python_id)
+            .ok_or(ArrayPoolError::ObjectNotFound)?;
+
+        // Update flags and release slot if now unused.
+        self.slots[object_index].set_transfered();
+        if self.slots[object_index].is_releasable() {
+            self.release_offset(object_index);
+        }
+
+        Ok(())
+    }
+
+    /// Get offset for a given object index.
+    fn offset_by_index(&self, object_index: usize) -> usize {
+        self.slots[..object_index].iter().map(|x| x.size).sum()
+    }
+
+    /// Update internal slots to mark slot as now free.
+    fn release_offset(&mut self, object_index: usize) {
+        debug_assert!(!self.slots[object_index].is_free());
+        let slot_len = self.slots.len();
 
         // Mark bloc as now free
         self.slots[object_index] = MemorySlot::with_size(self.slots[object_index].size);
@@ -263,13 +340,6 @@ impl<'a> MemoryPool<'a> {
             self.slots[object_index] = MemorySlot::empty();
             self.slots[object_index..slot_len].rotate_left(1);
         }
-
-        Ok(())
-    }
-
-    /// Get offset for a given object index.
-    fn offset_by_index(&self, object_index: usize) -> usize {
-        self.slots[..object_index].iter().map(|x| x.size).sum()
     }
 
     /// Get object info of given python object.
@@ -301,11 +371,38 @@ mod tests {
         }
 
         #[test]
+        fn test_releasable() {
+            let mut slot = MemorySlot::with_object_id(PythonId(12), 150);
+            assert!(!slot.is_releasable());
+
+            // Detach from main process
+            slot.refcount = 0;
+            assert!(!slot.is_releasable());
+
+            // Attach and detach again from main process
+            slot.refcount = 1;
+            assert!(!slot.is_releasable());
+            slot.refcount = 0;
+            assert!(!slot.is_releasable());
+
+            // Attach from sub process
+            slot.refcount = 1;
+            slot.set_transfered();
+            assert!(!slot.is_releasable());
+
+            // Release from sub process => not releasable
+            slot.refcount = 0;
+            assert!(slot.is_releasable());
+        }
+
+        #[test]
         fn test_split_block() {
             let python_id = PythonId(42);
             let refcount = 4;
 
-            let slot = MemorySlot::with_object_id(python_id, 200).set_refcount(refcount);
+            let slot = MemorySlot::with_object_id(python_id, 200)
+                .set_refcount(refcount)
+                .set_transfered();
 
             assert_eq!(
                 slot.split_block(50),
@@ -314,11 +411,15 @@ mod tests {
                         python_id,
                         size: 50,
                         refcount,
+                        source_pid: std::process::id(),
+                        flags: FLAG_MEMSLOT_TRANSFERED,
                     },
                     MemorySlot {
                         python_id: PythonId::empty(),
                         size: 150,
                         refcount: 0,
+                        source_pid: 0,
+                        flags: 0,
                     },
                 )
             );
@@ -328,12 +429,16 @@ mod tests {
                     MemorySlot {
                         python_id,
                         size: 0,
-                        refcount
+                        refcount,
+                        source_pid: std::process::id(),
+                        flags: FLAG_MEMSLOT_TRANSFERED,
                     },
                     MemorySlot {
                         python_id: PythonId::empty(),
                         size: 200,
                         refcount: 0,
+                        source_pid: 0,
+                        flags: 0,
                     },
                 )
             );
@@ -344,11 +449,15 @@ mod tests {
                         python_id,
                         size: 199,
                         refcount,
+                        source_pid: std::process::id(),
+                        flags: FLAG_MEMSLOT_TRANSFERED,
                     },
                     MemorySlot {
                         python_id: PythonId::empty(),
                         size: 1,
                         refcount: 0,
+                        source_pid: 0,
+                        flags: 0,
                     },
                 )
             );
@@ -361,6 +470,8 @@ mod tests {
                 python_id: PythonId(42),
                 size: 200,
                 refcount: 3,
+                source_pid: std::process::id(),
+                flags: 0,
             };
 
             let (_, _) = slot.split_block(200);
@@ -551,6 +662,7 @@ mod tests {
 
             // Detach
             assert_eq!(memory.detach_object(PythonId(40)), Ok(()));
+            assert_eq!(memory.set_object_releasable(PythonId(40)), Ok(()));
             assert_eq!(
                 memory.slots,
                 vec![
@@ -574,6 +686,7 @@ mod tests {
 
             // Detach middle one
             assert_eq!(memory.detach_object(PythonId(41)), Ok(()));
+            assert_eq!(memory.set_object_releasable(PythonId(41)), Ok(()));
             assert_eq!(memory.info_of(PythonId(40)), Some(ObjectInfo::new(0, 10)));
             assert_eq!(memory.info_of(PythonId(42)), Some(ObjectInfo::new(20, 10)));
             assert_eq!(
@@ -587,6 +700,7 @@ mod tests {
             );
 
             // Detach previous
+            assert_eq!(memory.set_object_releasable(PythonId(40)), Ok(()));
             assert_eq!(memory.detach_object(PythonId(40)), Ok(()));
             assert_eq!(memory.info_of(PythonId(42)), Some(ObjectInfo::new(20, 10)));
             assert_eq!(
@@ -600,6 +714,7 @@ mod tests {
             );
 
             // Detach next
+            assert_eq!(memory.set_object_releasable(PythonId(42)), Ok(()));
             assert_eq!(memory.detach_object(PythonId(42)), Ok(()));
             assert_eq!(
                 memory.slots,
@@ -625,6 +740,8 @@ mod tests {
             // Detach 40 and 41
             assert_eq!(memory.detach_object(PythonId(40)), Ok(()));
             assert_eq!(memory.detach_object(PythonId(41)), Ok(()));
+            assert_eq!(memory.set_object_releasable(PythonId(40)), Ok(()));
+            assert_eq!(memory.set_object_releasable(PythonId(41)), Ok(()));
             assert_eq!(
                 memory.slots,
                 vec![
@@ -685,6 +802,9 @@ mod tests {
             assert_eq!(memory.info_of(python_id), Some(ObjectInfo::new(0, 10)));
 
             assert!(memory.detach_object(python_id).is_ok());
+            assert_eq!(memory.info_of(python_id), Some(ObjectInfo::new(0, 10)));
+
+            assert!(memory.set_object_releasable(python_id).is_ok());
             assert_eq!(memory.info_of(python_id), None);
         }
 
@@ -745,6 +865,7 @@ mod tests {
             );
 
             // Start detaching
+            assert_eq!(memory.set_object_releasable(python_id1), Ok(()));
             assert_eq!(memory.detach_object(python_id1), Ok(()));
             assert_eq!(memory.detach_object(python_id1), Ok(()));
             assert_eq!(memory.detach_object(python_id1), Ok(()));
@@ -754,6 +875,7 @@ mod tests {
                 Err(ArrayPoolError::ObjectNotFound)
             );
 
+            assert_eq!(memory.set_object_releasable(python_id2), Ok(()));
             assert_eq!(memory.detach_object(python_id2), Ok(()));
             assert_eq!(memory.detach_object(python_id2), Ok(()));
             assert_eq!(memory.detach_object(python_id2), Ok(()));
