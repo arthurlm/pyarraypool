@@ -12,10 +12,10 @@ use std::{os::raw::c_schar, path::PathBuf, str::FromStr, sync::Arc};
 use memory_info::PythonId;
 use pyo3::{
     exceptions::PyException,
-    ffi::{PyBUF_WRITE, PyMemoryView_FromMemory},
+    ffi::{PyBUF_WRITE, PyMemoryView_Check, PyMemoryView_FromMemory, Py_ssize_t},
+    prelude::*,
+    types::PyTuple,
 };
-use pyo3::{ffi::PyMemoryView_Check, prelude::*};
-use pyo3::{ffi::Py_ssize_t, types::PyTuple};
 use shm::{ShmError, ShmObjectPool};
 
 use crate::shm::ShmObjectPoolBuilder;
