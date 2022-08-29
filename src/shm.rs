@@ -176,6 +176,12 @@ impl<'a> ShmObjectPool<'a> {
         Some(self.slice_mut_from(obj_mem_info))
     }
 
+    /// Dump memory info to stdout.
+    pub fn dump(&self) -> String {
+        let _guard = self.header.lock();
+        self.memory_pool.borrow().dump()
+    }
+
     fn slice_mut_from(&self, obj_mem_info: ObjectInfo) -> &'_ mut [u8] {
         let data_offset = obj_mem_info.offset() + self.offset_data;
 

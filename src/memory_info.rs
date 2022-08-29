@@ -358,6 +358,22 @@ impl<'a> MemoryPool<'a> {
             self.slots[position].size,
         ))
     }
+
+    /// Dump memory content as a string.
+    pub fn dump(&self) -> String {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter(|(_id, slot)| !slot.is_free())
+            .map(|(id, slot)| {
+                format!(
+                    "SLOT ID: {id}: pid: {0}, recount: {1}, flag: {2}",
+                    slot.python_id, slot.refcount, slot.flags
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 }
 
 #[cfg(test)]
@@ -889,6 +905,28 @@ mod tests {
                 memory.detach_object(python_id2),
                 Err(ArrayPoolError::ObjectNotFound(python_id2))
             );
+        }
+
+        #[test]
+        fn test_dump() -> anyhow::Result<()> {
+            let mut slots = vec![MemorySlot::empty(); SLOT_COUNT];
+            let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
+
+            // Add
+            memory.add_object(PythonId(40), 10)?;
+            memory.add_object(PythonId(41), 10)?;
+            memory.set_object_releasable(PythonId(41))?;
+            memory.add_object(PythonId(42), 10)?;
+
+            // Dump
+            assert_eq!(
+                memory.dump(),
+                "SLOT ID: 0: pid: 40, recount: 1, flag: 0\n\
+                 SLOT ID: 1: pid: 41, recount: 1, flag: 1\n\
+                 SLOT ID: 2: pid: 42, recount: 1, flag: 0"
+            );
+
+            Ok(())
         }
     }
 }
