@@ -79,6 +79,12 @@ impl PyShmObjectPool {
             .map_err(|e| e.into())
     }
 
+    fn set_object_releasable(&self, python_id: u64) -> PyResult<()> {
+        self.pool
+            .set_object_releasable(PythonId(python_id))
+            .map_err(|e| e.into())
+    }
+
     fn memview_of(&self, python_id: u64) -> Option<PyObject> {
         let data = self.pool.slice_of(PythonId(python_id))?;
         Some(self.pymemoryview_from_slice(data))

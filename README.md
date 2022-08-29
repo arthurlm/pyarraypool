@@ -78,6 +78,34 @@ if __name__ == "__main__":
 
 You can have a look at `notebook` / `example` folders for more details.
 
+## Fighting python GC
+
+There is few things to know about array releasing.
+
+When array are created in subprocess, GC can collect them before they are transfered in main process.
+
+Exemple sequence:
+
+1. Main process trigger subprocess job.
+2. Subprocess has something to return and create a shared array in function return.
+3. Subprocess GC is triggered and cleanup everything included return value.
+   So refcount reach 0.
+4. Main process wakes up and try to get subprocess return value.
+   Value has already been collect by GC and release from pool => CRASH !
+
+To fix this issue, there is a flag associated to each transferable array.
+This flag is set when object has been transfered between 2 processes.
+If this flag is not set, object will not be released.
+
+In case you want to create a transferable object (but do not want to transfer it between processes), you
+can override this flag using:
+
+```python
+shmarr = pyarraypool.make_transferable(arr, transfer_required=False)
+```
+
+Object will be releas from array pool as soon as refcount reach 0.
+
 ## Developper guide
 
 To build:
