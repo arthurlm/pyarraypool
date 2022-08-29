@@ -25,11 +25,23 @@ To list few of them:
 - [numba](https://numba.pydata.org/) with `prange`
 - switching from [CPython](https://github.com/python/cpython) to [PyPy](https://www.pypy.org/)
 - rewrite code using C / Cython / Rust
+- using [ray](https://docs.ray.io/en/latest/index.html)
 
 > Why not using numpy builtin mmap ?
 
 Numpy builtin [memory mapping](https://numpy.org/doc/stable/reference/generated/numpy.memmap.html) is made to manage a single numpy array.
 It is not made to manage multiple "small" array that are frequently created / destroy.
+
+> Why not using big framework like ray ?
+
+Ray API is great / super simple / efficient.
+
+Unfortunately it is slow because under the hood is still use pickle to transfer data between processes.
+It is not optimized for local and CPU bound simple computation.
+
+See:
+
+- [performance comparison](example/ray_vs_pyarraypool.py)
 
 ## Few design choices
 
