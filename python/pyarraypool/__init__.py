@@ -1,4 +1,5 @@
 import logging
+import os
 import tempfile
 import weakref
 from contextlib import contextmanager
@@ -12,6 +13,8 @@ from .pyarraypool import ShmObjectPool
 MemorySizeType = Union[str, int]
 
 LOGGER = logging.getLogger(__name__)
+
+_MAX_PYTHON_ID = np.iinfo(np.int64).max
 
 _GLOBAL_POOL: Optional[ShmObjectPool] = None
 _CFG_LINK_PATH = f"{tempfile.gettempdir()}/pyarraypool.seg"
@@ -81,7 +84,7 @@ class ndarrayproxy(np.ndarray):
 
 
 def make_transferable(arr: np.ndarray) -> ndarrayproxy:
-    python_id = id(arr)
+    python_id = hash((id(arr), os.getpid())) % _MAX_PYTHON_ID
 
     pool = get_reusable_pool()
 
