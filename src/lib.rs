@@ -89,6 +89,10 @@ impl PyShmObjectPool {
         let data = self.pool.slice_of(PythonId(python_id))?;
         Some(self.pymemoryview_from_slice(data))
     }
+
+    fn dump(&self) -> String {
+        self.pool.dump()
+    }
 }
 
 impl PyShmObjectPool {

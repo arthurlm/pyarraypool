@@ -24,3 +24,6 @@ class ShmObjectPool:
 
     def memview_of(self, python_id: int) -> Optional[memoryview]:
         ...
+
+    def dump(self) -> str:
+        ...
