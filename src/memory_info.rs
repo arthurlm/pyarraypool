@@ -1,6 +1,6 @@
 /*! Helper to manage memory block. */
 
-use std::process;
+use std::{fmt, process};
 
 use thiserror::Error;
 
@@ -16,12 +16,12 @@ pub enum ArrayPoolError {
     NoFreeBlocLeft,
 
     /// Object already exists.
-    #[error("object already exists")]
-    ObjectAlreadyExists,
+    #[error("object already exists (python ID: {0})")]
+    ObjectAlreadyExists(PythonId),
 
     /// Object is not found.
-    #[error("object cannot be found")]
-    ObjectNotFound,
+    #[error("object cannot be found: (python ID: {0})")]
+    ObjectNotFound(PythonId),
 
     /// Invalid python object ID.
     #[error("invalid python object ID")]
@@ -44,6 +44,12 @@ impl PythonId {
 
     const fn empty() -> Self {
         Self(0)
+    }
+}
+
+impl fmt::Display for PythonId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -215,7 +221,7 @@ impl<'a> MemoryPool<'a> {
 
         // Check object does not already exists
         if self.slots.iter().any(|x| x.python_id == python_id) {
-            return Err(ArrayPoolError::ObjectAlreadyExists);
+            return Err(ArrayPoolError::ObjectAlreadyExists(python_id));
         }
 
         // Find free space
@@ -259,7 +265,7 @@ impl<'a> MemoryPool<'a> {
             .slots
             .iter()
             .position(|slot| slot.python_id == python_id)
-            .ok_or(ArrayPoolError::ObjectNotFound)?;
+            .ok_or(ArrayPoolError::ObjectNotFound(python_id))?;
 
         // Increase refcount and update internals
         self.slots[object_index].refcount += 1;
@@ -281,7 +287,7 @@ impl<'a> MemoryPool<'a> {
             .slots
             .iter()
             .position(|slot| slot.python_id == python_id)
-            .ok_or(ArrayPoolError::ObjectNotFound)?;
+            .ok_or(ArrayPoolError::ObjectNotFound(python_id))?;
 
         // Decrease reference count and release slot if now unused.
         if self.slots[object_index].refcount > 0 {
@@ -303,7 +309,7 @@ impl<'a> MemoryPool<'a> {
             .slots
             .iter()
             .position(|slot| slot.python_id == python_id)
-            .ok_or(ArrayPoolError::ObjectNotFound)?;
+            .ok_or(ArrayPoolError::ObjectNotFound(python_id))?;
 
         // Update flags and release slot if now unused.
         self.slots[object_index].set_transfered();
@@ -517,7 +523,7 @@ mod tests {
             assert_eq!(memory.add_object(PythonId(40), 10), Ok(0));
             assert_eq!(
                 memory.add_object(PythonId(40), 10),
-                Err(ArrayPoolError::ObjectAlreadyExists)
+                Err(ArrayPoolError::ObjectAlreadyExists(PythonId(40)))
             );
         }
 
@@ -639,7 +645,7 @@ mod tests {
 
             assert_eq!(
                 memory.detach_object(PythonId(42)),
-                Err(ArrayPoolError::ObjectNotFound)
+                Err(ArrayPoolError::ObjectNotFound(PythonId(42)))
             );
         }
 
@@ -824,7 +830,7 @@ mod tests {
             let mut memory = MemoryPool::from_uninit_slice(&mut slots, MEMORY_SIZE);
             assert_eq!(
                 memory.attach_object(PythonId(40)),
-                Err(ArrayPoolError::ObjectNotFound)
+                Err(ArrayPoolError::ObjectNotFound(PythonId(40)))
             );
         }
 
@@ -872,7 +878,7 @@ mod tests {
             assert_eq!(memory.detach_object(python_id1), Ok(()));
             assert_eq!(
                 memory.detach_object(python_id1),
-                Err(ArrayPoolError::ObjectNotFound)
+                Err(ArrayPoolError::ObjectNotFound(python_id1))
             );
 
             assert_eq!(memory.set_object_releasable(python_id2), Ok(()));
@@ -881,7 +887,7 @@ mod tests {
             assert_eq!(memory.detach_object(python_id2), Ok(()));
             assert_eq!(
                 memory.detach_object(python_id2),
-                Err(ArrayPoolError::ObjectNotFound)
+                Err(ArrayPoolError::ObjectNotFound(python_id2))
             );
         }
     }
